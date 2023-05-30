@@ -1,75 +1,53 @@
+import sys
+import os
+sys.path.insert(0,r'./') #Add root directory here
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 import torchvision.models as models
 import torchvision.transforms as transforms
-import sys
-sys.path.insert(0,r'./') #Add root directory here
 
-from losses import style_loss, total_variation_loss, GramMatrix
-from losses import mse_loss as content_loss
-
-from generator import Generator
+import tqdm
 from PIL import Image
 
+from src.models.losses import style_loss, total_variation_loss, GramMatrix
+from src.models.losses import mse_loss as content_loss
 
-# Training loop
-for epoch in range(num_epochs):
-    # Generate stylized output
-    stylized_output = generator(content_tensor)
-
-    # Extract features from VGG19 for content and style images
-    content_features = vgg(content_tensor)
-    style_features = vgg(style_tensor)
-    stylized_features = vgg(stylized_output)
-
-    # Compute content loss
-    loss_content = content_loss(stylized_features, content_features)
-
-    # Compute style loss
-    loss_style = style_loss(stylized_features, style_features)
-
-    # Compute variation loss
-    variation_loss = total_variation_loss(stylized_output)
-
-    # Compute total loss
-    total_loss = alpha * loss_content \
-                 + beta * loss_style +\
-                 gamma * variation_loss
-
-    # Backpropagation and optimization
-    optimizer.zero_grad()
-    total_loss.backward()
-    optimizer.step()
-
-    # Print the loss for monitoring
-    print(f"Epoch [{epoch + 1}/{num_epochs}], Total Loss: {total_loss.item()}")
+from src.models.generator import Generator
+from src.models.discriminator import Discriminator
 
 
 class Trainer:
     def __init__(self,
-                 dataloader,
+                 dataloaders,
+                 output_dir: str,
+                 lr_scheduler_type,
+                 resume_from_checkpoint,
+                 seed,
+                 with_tracking,
+                 report_to,
+                 num_train_epochs,
+                 weight_decay,
+                 per_device_batch_size,
+                 gradient_accumulation_steps,
+                 do_eval_per_epoch,
+                 learning_rate,
                  vgg_model_type: str,
-                 num_epochs: int,
-                 output_path: str,
+                 alpha: float,
+                 beta: float,
+                 gamma: float
                  ):
 
-        # Preprocess the images
-        self.preprocess = transforms.Compose([
-            transforms.Resize((width, height)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
-
-        self.content_img_path = content_img_path
-        self.style_img_path = style_img_path
+        self.dataloaders = dataloaders.__call__()
+        self.learning_rate = learning_rate
         self.vgg_model_type = vgg_model_type
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
-        self.num_epochs = num_epochs
-        self.output_path = output_path
+        self.num_train_epochs = num_train_epochs
+        self.output_dir = output_dir
 
     def get_feature_extractor(self):
         if self.vgg_model_type == '19':
@@ -89,7 +67,7 @@ class Trainer:
 
         return generator, vgg
 
-    def compute_loss(self, content_features, style_features, stylized_features):
+    def compute_loss(self, content_features, style_features, stylized_features, stylized_output):
         # Compute content loss
         loss_content = content_loss(stylized_features, content_features)
         # Compute style loss
@@ -108,14 +86,15 @@ class Trainer:
     def train(self):
         img_generator, vgg = self.build_model()
         # Define the optimizer
-        optimizer = optim.Adam(img_generator.parameters(), lr=lr_scheduler)
+        optimizer = optim.Adam(img_generator.parameters(), lr=self.learning_rate)
+        scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.5, total_iters=30)
 
         # Training loop
-        for epoch in range(self.num_epochs):
+        for epoch in tqdm.tqdm(range(self.num_train_epochs)):
             img_generator.train()
-            for step, batch in enumerate(dataloader):
-                content_imgs = batch[:]['content_image']
-                style_imgs = batch[:]['style_image']
+            for step, batch in enumerate(self.dataloaders):
+                content_imgs = batch['content_image']
+                style_imgs = batch['style_image']
 
                 # Generate stylized output
                 stylized_output = img_generator(content_imgs)
@@ -125,19 +104,21 @@ class Trainer:
                 style_features = vgg(style_imgs)
                 stylized_features = vgg(stylized_output)
 
-                total_loss = self.compute_loss(content_features, style_features, stylized_features)
+                loss_content, loss_style, total_loss = self.compute_loss(content_features, style_features, stylized_features, stylized_output)
 
                 # Backpropagation and optimization
                 optimizer.zero_grad()
                 total_loss.backward()
                 optimizer.step()
+                scheduler.step()
 
             # Print the loss for monitoring
-            print(f"Epoch [{epoch + 1}/{num_epochs}], Total Loss: {total_loss.item()}")
+            print(f"Epoch [{epoch + 1}/{self.num_train_epochs}], Total Loss: {total_loss.item()}")
             self.save(img_generator)
 
     def save(self, generator):
-        torch.save(generator.state_dict(), self.output_path)
+        model_path = os.path.join(self.output_dir, "model" + ".pth")
+        torch.save(generator.state_dict(), model_path)
 
 
 

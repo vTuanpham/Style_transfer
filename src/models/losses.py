@@ -28,6 +28,7 @@ def style_loss(style, combination):
     loss = torch.sum(torch.square(S - C)) / (4.0 * (channels ** 2) * (size ** 2))
     return loss
 
+
 def total_variation_loss(image):
     # Calculate the total variation loss
     batch_size, channels, height, width = image.size()

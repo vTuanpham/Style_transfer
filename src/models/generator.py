@@ -64,3 +64,25 @@ class ResidualBlock(nn.Module):
             x = self.relu2(self.conv2(x))
             x = x + residual  # Element-wise addition with the residual
         return x
+
+
+# Custom layer inherited from nn.Module
+class SymmetricPadding2D(nn.Module):
+    def __init__(self, output_dim=1, padding=[1, 1], data_format="NCHW"):
+        super(SymmetricPadding2D, self).__init__()
+        self.output_dim = output_dim
+        self.data_format = data_format
+        self.padding = padding
+
+    def forward(self, inputs):
+        if self.data_format == "NCHW":
+            pad = (0, 0, 0, 0) + tuple(self.padding)
+        elif self.data_format == "NHWC":
+            pad = (0, 0) + tuple(self.padding) + (0, 0)
+
+        out = nn.functional.pad(inputs, pad, mode="reflect")
+        return out
+
+    def extra_repr(self):
+        return "output_dim={}, padding={}, data_format={}".format(
+            self.output_dim, self.padding, self.data_format)
