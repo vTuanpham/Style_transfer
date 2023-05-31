@@ -12,12 +12,15 @@ def parse_args(args):
     parser = argparse.ArgumentParser()
     # Data
     parser.add_argument('--output_dir', type=str, help="The output directory to save")
-    parser.add_argument('--content_datapath', type=str, help="The output directory to save")
-    parser.add_argument('--style_datapath', type=str, help="The output directory to save")
+    parser.add_argument('--content_datapath', type=str, help="The path to content images dir")
+    parser.add_argument('--style_datapath', type=str, help="The path to style images dir")
     parser.add_argument('--batch_size', type=int, default=2, help="Batch size for the dataloader")
-    parser.add_argument('--max_train_samples', type=int, default=None, help="Number of training samples")
+    parser.add_argument('--max_content_train_samples', type=int, default=None, help="Number of content training samples")
+    parser.add_argument('--max_style_train_samples', type=int, default=None, help="Number of style training samples")
     parser.add_argument('--max_eval_samples', type=int, default=None, help="Number of validation samples")
     parser.add_argument('--seed', type=int, default=42, help="A seed for reproducible training.")
+    parser.add_argument('--width', type=int, default=128, help="Width of the image")
+    parser.add_argument('--height', type=int, default=128, help="Height of the image")
 
     # Training
     parser.add_argument('--num_train_epochs', type=int, default=10,
@@ -36,18 +39,16 @@ def parse_args(args):
 
     # Optimizer
     parser.add_argument('--vgg_model_type', type=str, default='19',help=(
-            'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
-            ' `"wandb"`,'"mlflow"', `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations.'
-            "Only applicable when `--with_tracking` is passed."
+            "Which models of the vgg to use as a feature extractor"
         ))
     parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help="Initial learning rate (after the potential warmup period) to use.")
     parser.add_argument('--alpha', type=float, default=5e-5,
-                        help="Initial alpha (after the potential warmup period) to use.")
+                        help="Initial alpha to use.")
     parser.add_argument('--beta', type=float, default=5e-5,
-                        help="Initial beta (after the potential warmup period) to use.")
+                        help="Initial beta to use.")
     parser.add_argument('--gamma', type=float, default=5e-5,
-                        help="Initial gamma (after the potential warmup period) to use.")
+                        help="Initial gamma to use.")
     parser.add_argument('--weight_decay', type=float, default=0.3,
                         help="Weight decay to use.")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
@@ -74,10 +75,11 @@ def main(args):
         "style_datapath": args.style_datapath,
         "batch_size": args.batch_size,
         "transform": transforms.Compose([
-            transforms.Resize((256, 256)),
+            transforms.Resize((args.width, args.height)),
             transforms.ToTensor()
         ]),
-        "max_train_samples": args.max_train_samples,
+        "max_style_train_samples": args.max_style_train_samples,
+        "max_content_train_samples": args.max_content_train_samples,
         "max_eval_samples": args.max_eval_samples,
         "seed": args.seed
     }

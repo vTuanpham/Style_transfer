@@ -20,7 +20,8 @@ class STDataset(Dataset):
         content_url = self.content_urls[idx]
         # Randomly choose style for the image
         style_url = random.choice(self.style_urls)
-        #         style_url = self.style_urls[idx]
+        # style_url = r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\85343.jpg'
+        # style_url = self.style_urls[idx]
 
         content_image = Image.open(content_url).convert('RGB')
         style_image = Image.open(style_url).convert('RGB')
@@ -39,13 +40,15 @@ class STDataloader:
                  style_datapath,
                  batch_size,
                  transform,
-                 max_train_samples,
+                 max_style_train_samples,
+                 max_content_train_samples,
                  max_eval_samples,
                  seed):
         self.batch_size = batch_size
         self.transform = transform
         self.seed = seed
-        self.max_train_samples = max_train_samples
+        self.max_style_train_samples = max_style_train_samples
+        self.max_content_train_samples = max_content_train_samples
         self.max_eval_samples = max_eval_samples
         self.content_datapath = content_datapath
         self.style_datapath = style_datapath
@@ -54,19 +57,21 @@ class STDataloader:
         self.generator.manual_seed(self.seed)
 
     def __call__(self, *args, **kwargs):
-        n = self.max_train_samples
-
-        content_datapath_list = os.listdir(self.content_datapath)[:n]
+        content_datapath_list = os.listdir(self.content_datapath)[:self.max_content_train_samples]
 
         # Only loading the image url to save on Ram
         content_image_urls = []
         for url in content_datapath_list:
+            extension = url.split(".")[-1]
+            assert extension in ["jpg"] or extension in ["png"], "non-image file found in dir."
             content_image_urls.append(os.path.join(self.content_datapath, url))
 
-        style_datapath_list = os.listdir(self.style_datapath)[:n]
+        style_datapath_list = os.listdir(self.style_datapath)[:self.max_style_train_samples]
 
         style_image_urls = []
         for url in style_datapath_list:
+            extension = url.split(".")[-1]
+            assert extension in ["jpg"] or extension in ["png"], "non-image file found in dir."
             style_image_urls.append(os.path.join(self.style_datapath, url))
 
         dataset = STDataset(content_image_urls, style_image_urls, transform=self.transform)
