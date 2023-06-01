@@ -9,11 +9,13 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 import torchvision.models as models
 import torchvision.transforms as transforms
+from torchvision.models._utils import IntermediateLayerGetter
 
 import tqdm
 from PIL import Image
+from typing import List
 
-from src.models.losses import style_loss, total_variation_loss, GramMatrix
+from src.models.losses import style_loss, total_variation_loss
 from src.models.losses import mse_loss as content_loss
 
 from src.models.generator import Generator
@@ -39,7 +41,11 @@ class Trainer:
                  vgg_model_type: str,
                  alpha: float,
                  beta: float,
-                 gamma: float
+                 gamma: float,
+                 content_layers_idx: List[int] = [25, 30, 34],
+                 style_layers_idx: List[int] = [15, 25, 28, 34, 36],
+                 num_res_block: int = 20,
+                 num_deep_res_block: int = 2
                  ):
 
         self.dataloaders = dataloaders.__call__()
@@ -50,6 +56,10 @@ class Trainer:
         self.gamma = gamma
         self.num_train_epochs = num_train_epochs
         self.output_dir = output_dir
+        self.content_layers_idx = content_layers_idx
+        self.style_layers_idx = style_layers_idx
+        self.num_res_block = num_res_block
+        self.num_deep_res_block = num_deep_res_block
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -62,42 +72,40 @@ class Trainer:
 
         layers = list(vgg.children())
 
-        feature_extractors = []
         if isinstance(selected_indices, list):
-            for idx in selected_indices:
-                if idx < len(layers):
-                    feature_extractor = nn.Sequential(*layers[:idx + 1]).eval().to(device)
-                    feature_extractors.append(feature_extractor)
-                else:
-                    raise ValueError(f"Invalid layer index: {idx}. Index should be less than {len(layers)}.")
+            selected_layers = {str(idx): layers[idx] for idx in selected_indices if idx < len(layers)}
+            if len(selected_layers) != len(selected_indices):
+                raise ValueError("Invalid layer index provided.")
         else:
             raise ValueError("Selected indices should be provided as a list of layer indices.")
 
+        feature_extractors = IntermediateLayerGetter(vgg, return_layers=selected_layers).to(device)
         return feature_extractors
 
     def build_model(self):
-        generator = Generator(num_res_block=25).to(self.device)
+        generator = Generator(num_res_block=self.num_res_block,
+                              num_deep_res_block=self.num_deep_res_block).to(self.device)
         discriminator = Discriminator().to(self.device)
-        content_extractors = self.get_feature_extractor([25, 30, 34], device=self.device)
-        style_extractors = self.get_feature_extractor([15, 25, 28, 34, 36], device=self.device)
+
+        content_extractors = self.get_feature_extractor(self.content_layers_idx, device=self.device)
+        style_extractors = self.get_feature_extractor(self.style_layers_idx, device=self.device)
 
         return generator, discriminator, content_extractors, style_extractors
 
     def compute_loss(self, content_features, style_features, stylized_output):
-
-        # Compute style loss
-        losses = []
-        for feature in style_features:
-            loss = style_loss(feature['orginal'], feature['model_output'])
-            losses.append(loss)
-        loss_style = sum(losses) / len(losses)
-
         # Compute content loss
         losses = []
         for feature in content_features:
             loss = content_loss(feature['orginal'], feature['model_output'])
             losses.append(loss)
         loss_content = sum(losses) / len(losses)
+
+        # Compute style loss
+        losses = []
+        for feature in style_features:
+            loss = style_loss(feature['orginal'], feature['model_output'])
+            losses.append(loss)
+        loss_style = sum(losses)
 
         # Compute variation loss
         variation_loss = total_variation_loss(stylized_output)
@@ -127,7 +135,7 @@ class Trainer:
                 style_imgs = batch['style_image'].to(self.device)
 
                 # Stack content and style in the channels dim so the generator have
-                # some context of what to style the content on
+                # some context of what to style the content on (batch, channels, width, height)
                 stacked_images = torch.cat((content_imgs, style_imgs), dim=1)
 
                 # Generate stylized output
@@ -135,14 +143,18 @@ class Trainer:
 
                 # Extract features from VGG19 for content and style images
                 content_features = []
-                for feature_extractor in content_extractors:
-                    content_features.append({"orginal": feature_extractor(content_imgs),
-                                             "model_output": feature_extractor(stylized_output)})
+                org_output_features = list(content_extractors(content_imgs).values())
+                gen_output_features = list(content_extractors(stylized_output).values())
+                for layer_idx in range(len(self.content_layers_idx)):
+                    content_features.append({"orginal": org_output_features[layer_idx],
+                                             "model_output": gen_output_features[layer_idx]})
 
                 style_features = []
-                for feature_extractor in style_extractors:
-                    style_features.append({"orginal": feature_extractor(style_imgs),
-                                             "model_output": feature_extractor(stylized_output)})
+                org_output_features = list(style_extractors(style_imgs).values())
+                gen_output_features = list(style_extractors(stylized_output).values())
+                for layer_idx in range(len(self.style_layers_idx)):
+                    style_features.append({"orginal": org_output_features[layer_idx],
+                                             "model_output": gen_output_features[layer_idx]})
 
                 loss_content, loss_style, total_loss = self.compute_loss(content_features,
                                                                          style_features, stylized_output)
@@ -155,18 +167,32 @@ class Trainer:
 
             loss_list.append(float(total_loss.item()))
             # Print the loss for monitoring
-            print(f"Epoch [{epoch + 1}/{self.num_train_epochs}], Total Loss: {total_loss.item()}")
+            print(f"Epoch [{epoch + 1}/{self.num_train_epochs}],"
+                  f" Total Loss: {total_loss.item()}"
+                  f" Loss content: {loss_content}"
+                  f" Loss style: {loss_style}")
             print(f"Min loss: {min(loss_list)}")
             if float(total_loss.item()) == min(loss_list):
                 print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
-                self.save(img_generator)
+                self.save(img_generator, loss_info={"total": float(total_loss.item()),
+                                                    "content": loss_content,
+                                                    "style": loss_style})
             else:
                 print(f"Discarding epoch [{epoch + 1}/{self.num_train_epochs}]")
                 continue
 
-    def save(self, generator, discriminator=None):
-        model_path = os.path.join(self.output_dir, "generator" + ".pth")
+    def save(self, generator, discriminator=None, loss_info=None):
+        dir_name = f"TotalL_{loss_info['total']}_Content_{loss_info['content']}_Style_{loss_info['style']}"
+        save_path_dir = os.path.join(self.output_dir, dir_name)
+        print(f" Saving in {save_path_dir}")
+        if not os.path.exists(save_path_dir):
+            os.makedirs(save_path_dir, exist_ok=False)
+        else:
+            raise FileExistsError
+
+        model_path = os.path.join(save_path_dir, f"generator" + ".pth")
         torch.save(generator.state_dict(), model_path)
+
         if discriminator is not None:
             model_path = os.path.join(self.output_dir, "discriminator" + ".pth")
             torch.save(discriminator.state_dict(), model_path)
