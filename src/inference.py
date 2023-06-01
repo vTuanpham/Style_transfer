@@ -80,14 +80,14 @@ import torchvision.transforms as transforms
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-style_img_generator = Generator(num_res_block=25).to(device)
-checkpoint = torch.load(r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\models\checkpoints\generator.pth")
+style_img_generator = Generator(num_res_block=20, num_deep_res_block=2).to(device)
+checkpoint = torch.load(r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\models\checkpoints\TotalL_14.296285629272461_Content_2.1988682746887207_Style_0.16542977094650269\generator.pth")
 
 style_img_generator.load_state_dict(checkpoint)
-content_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im80.jpg').convert('RGB')
-style_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\972994.jpg').convert('RGB')
+content_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im20.jpg').convert('RGB')
+style_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\888440.jpg').convert('RGB')
 trans = transforms.Compose([
-            transforms.Resize((100, 100)),
+            transforms.Resize((64, 64)),
             transforms.ToTensor()
         ])
 style_img_generator.eval()
@@ -104,4 +104,4 @@ final_output = style_img_generator(stacked_images.unsqueeze(0))
 final_image = transforms.ToPILImage()(final_output.squeeze(0).detach().cpu())
 
 # Save the final stylized image
-final_image.save("stylized_image.jpg")
+final_image.save("stylized_image1.jpg")

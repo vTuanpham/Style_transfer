@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 # Define the Gram Matrix computation
@@ -8,8 +9,7 @@ class GramMatrix(nn.Module):
         b, c, h, w = input.size()
         features = input.view(b * c, h * w)
         gram_matrix = torch.mm(features, features.t())
-
-        return gram_matrix.div(b * c * h * w)
+        return gram_matrix
 
 
 def mse_loss(input, target):
