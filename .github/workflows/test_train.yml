@@ -1,0 +1,58 @@
+name: Test train
+
+on:
+  push:
+    paths:
+      - '!README.md'
+      - 'src/**.py'
+      - 'utils/**.py'
+      - '.github/workflows/**.yml'
+      - '**.py'
+    branches:
+      - 'main'
+      - 'dev'
+      - '!feat/**'
+  pull_request:
+    type: [opened, reopened, synchronize]
+    paths:
+      - '!README.md'
+      - 'src/**.py'
+      - 'utils/**.py'
+    branches:
+      - 'main'
+      - 'dev'
+      - '!feat/**'
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          cache: 'pip' # caching pip dependencies
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: List files
+        run: ls
+
+      - name: Test
+        run: python3 tests/inference_test.py
