@@ -66,5 +66,9 @@ jobs:
       - name: List files
         run: ls
 
+# ubuntu
+#      - name: Running training script
+#        run: ./scripts/train_test
+
       - name: Running training script
-        run: ./scripts/train_test
+        run: bash src/scripts/train_test.sh
