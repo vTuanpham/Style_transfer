@@ -1,5 +1,4 @@
 --index-url https://download.pytorch.org/whl/cu117
-matplotlib
 Pillow>=9.0.0
 torch==2.0.0+cu117
 torchvision==0.15.1+cu117
