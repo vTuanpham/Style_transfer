@@ -4,4 +4,4 @@ torch==2.0.0+cu117
 torchvision==0.15.1+cu117
 numpy>=1.17.5
 typing-extensions>=4.4.0
-wandb>=0.14.0
+wandb
