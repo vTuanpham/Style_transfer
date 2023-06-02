@@ -51,7 +51,6 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           pip install -r requirements.txt
-          sudo apt-get install python3-matplotlib
 
       - name: Cache pip dependencies
         uses: actions/cache@v2
