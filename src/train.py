@@ -93,6 +93,7 @@ def main(args):
         "do_eval_per_epoch": args.do_eval_per_epoch,
         "learning_rate": args.learning_rate,
         "vgg_model_type": args.vgg_model_type,
+        "login_key": None,
         "seed": args.seed,
         "alpha": args.alpha,
         "beta": args.beta,
