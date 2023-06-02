@@ -1,6 +1,7 @@
+--index-url https://download.pytorch.org/whl/cu117
+--extra-index-url https://www.lfd.uci.edu/~gohlke/pythonlibs/#matplotlib
 matplotlib>=3.7.0
 Pillow>=9.0.0
---index-url https://download.pytorch.org/whl/cu117
 torch==2.0.0+cu117
 torchvision==0.15.1+cu117
 numpy>=1.17.5
