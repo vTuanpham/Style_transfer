@@ -1,7 +1,8 @@
-Pillow==9.5.0
+Pillow==9.1.0
 --index-url https://download.pytorch.org/whl/cu117
 torch==2.0.0+cu117
 torchvision==0.15.1+cu117
-numpy==1.21.1
+numpy==1.23.5
 matplotlib==3.5.1
 typing-extensions==4.5.0
+wandb==0.13.9

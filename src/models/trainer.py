@@ -12,6 +12,7 @@ import torchvision.transforms as transforms
 from torchvision.models._utils import IntermediateLayerGetter
 
 import tqdm
+import wandb
 from PIL import Image
 from typing import List
 
@@ -23,6 +24,9 @@ from src.models.discriminator import Discriminator
 from src.utils.image_plot import plot_image
 
 
+PRJ_NAME = "Style_transfer"
+
+
 class Trainer:
     def __init__(self,
                  dataloaders,
@@ -30,38 +34,66 @@ class Trainer:
                  lr_scheduler_type,
                  resume_from_checkpoint,
                  seed,
-                 with_tracking,
-                 report_to,
                  num_train_epochs,
                  weight_decay,
                  per_device_batch_size,
                  gradient_accumulation_steps,
                  do_eval_per_epoch,
                  learning_rate,
-                 vgg_model_type: str,
                  alpha: float,
                  beta: float,
                  gamma: float,
+                 login_key: str,
+                 vgg_model_type: str = '19',
+                 with_tracking: bool = False,
                  content_layers_idx: List[int] = [25, 30, 34],
-                 style_layers_idx: List[int] = [15, 25, 28, 34, 36],
+                 style_layers_idx: List[int] = [14, 19, 25, 28, 34],
                  num_res_block: int = 20,
                  num_deep_res_block: int = 2
                  ):
 
+        self.output_dir = output_dir
         self.dataloaders = dataloaders.__call__()
-        self.learning_rate = learning_rate
-        self.vgg_model_type = vgg_model_type
+        self.per_device_batch_size = per_device_batch_size
+
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
-        self.num_train_epochs = num_train_epochs
-        self.output_dir = output_dir
-        self.content_layers_idx = content_layers_idx
-        self.style_layers_idx = style_layers_idx
+        self.with_tracking = with_tracking
+        self.login_key = login_key if with_tracking else None
+        self.vgg_model_type = vgg_model_type
+        self.learning_rate = learning_rate
         self.num_res_block = num_res_block
         self.num_deep_res_block = num_deep_res_block
+        self.content_layers_idx = content_layers_idx
+        self.style_layers_idx = style_layers_idx
+        self.num_train_epochs = num_train_epochs
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        if self.with_tracking:
+            # Initialize tracker
+            self.wandb.login(self.login_key)
+            self.wandb = wandb.init(
+                project=PRJ_NAME,
+                # track hyperparameters and run metadata
+                config={
+                    "learning_rate": self.learning_rate,
+                    "feature_extractor": self.vgg_model_type,
+                    "loss_content_weight": self.alpha,
+                    "loss_style_weight": self.beta,
+                    "loss_variation_weight": self.gamma,
+                    "epochs": self.num_train_epochs,
+                    "content_layers_idx": self.content_layers_idx,
+                    "style_layers_idx": self.style_layers_idx,
+                    "num_deep_res_block": self.num_deep_res_block,
+                    "num_res_block": self.num_res_block,
+                    "device": self.device,
+                    "batch_size": self.per_device_batch_size
+                    }
+                )
+        else:
+            self.wandb = None
 
     @staticmethod
     def get_feature_extractor(selected_indices, vgg_model_type="16", device='cpu'):
@@ -115,9 +147,10 @@ class Trainer:
                      + self.beta * loss_style + \
                      self.gamma * variation_loss
 
-        return loss_content, loss_style, total_loss
+        return loss_content, loss_style, variation_loss, total_loss
 
     def train(self):
+
         img_generator, discriminator, content_extractors, style_extractors = self.build_model()
         # Define the optimizer
         generator_optimizer  = optim.Adam(img_generator.parameters(), lr=self.learning_rate)
@@ -156,8 +189,8 @@ class Trainer:
                     style_features.append({"orginal": org_output_features[layer_idx],
                                              "model_output": gen_output_features[layer_idx]})
 
-                loss_content, loss_style, total_loss = self.compute_loss(content_features,
-                                                                         style_features, stylized_output)
+                loss_content, loss_style, variation_loss, total_loss = self.compute_loss(content_features,
+                                                                                        style_features, stylized_output)
 
                 # Backpropagation and optimization
                 generator_optimizer.zero_grad()
@@ -167,11 +200,22 @@ class Trainer:
 
             loss_list.append(float(total_loss.item()))
             # Print the loss for monitoring
-            print(f"Epoch [{epoch + 1}/{self.num_train_epochs}],"
-                  f" Total Loss: {total_loss.item()}"
-                  f" Loss content: {loss_content}"
-                  f" Loss style: {loss_style}")
-            print(f"Min loss: {min(loss_list)}")
+            print(f"\n --- Training log --- \n")
+            print(f"   Epoch [{epoch + 1}/{self.num_train_epochs}]"
+                  f"\n Total Loss: {total_loss.item()}"
+                  f"\n Loss content: {loss_content} | Contributed content loss: {loss_content*self.alpha}"
+                  f"\n Loss style: {loss_style} | Contributed style loss: {loss_style*self.beta}"
+                  f"\n Loss variation: {variation_loss} | Contributed variation loss: {variation_loss*self.gamma}"
+                  f"\n Minimum loss of overall training session: {min(loss_list)} \n")
+
+            if self.with_tracking:
+                print("--- Logging to wandb ---")
+                self.wandb.log({"Loss_content_contributed": loss_content*self.alpha,
+                                "Loss_style_contributed": loss_style*self.beta,
+                                "Loss_variation_contributed": variation_loss*self.gamma,
+                                "Total_loss": float(total_loss.item()),
+                                "Min_loss": min(loss_list)}, step=epoch)
+
             if float(total_loss.item()) == min(loss_list):
                 print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
                 self.save(img_generator, loss_info={"total": float(total_loss.item()),
@@ -180,6 +224,9 @@ class Trainer:
             else:
                 print(f"Discarding epoch [{epoch + 1}/{self.num_train_epochs}]")
                 continue
+
+        if self.with_tracking:
+            self.wandb.finish()
 
     def save(self, generator, discriminator=None, loss_info=None):
         dir_name = f"TotalL_{loss_info['total']}_Content_{loss_info['content']}_Style_{loss_info['style']}"

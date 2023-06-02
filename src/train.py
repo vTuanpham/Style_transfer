@@ -31,11 +31,6 @@ def parse_args(args):
                         help="If the training should continue from a checkpoint folder. (can be bool or string)")
     parser.add_argument('--do_eval_per_epoch', action='store_true',
                         help="Whether to run evaluate per epoch.")
-    parser.add_argument('--report_to', type=str, default='wandb',help=(
-            'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
-            ' `"wandb"`,'"mlflow"', `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations.'
-            "Only applicable when `--with_tracking` is passed."
-        ))
 
     # Optimizer
     parser.add_argument('--vgg_model_type', type=str, default='19',help=(
@@ -90,9 +85,7 @@ def main(args):
         "output_dir": args.output_dir,
         "lr_scheduler_type": args.lr_scheduler_type,
         "resume_from_checkpoint": args.resume_from_checkpoint,
-        "seed": args.seed,
         "with_tracking": args.with_tracking,
-        "report_to": args.report_to,
         "num_train_epochs": args.num_train_epochs,
         "weight_decay": args.weight_decay,
         "per_device_batch_size":dataloaders.batch_size,
@@ -100,6 +93,7 @@ def main(args):
         "do_eval_per_epoch": args.do_eval_per_epoch,
         "learning_rate": args.learning_rate,
         "vgg_model_type": args.vgg_model_type,
+        "seed": args.seed,
         "alpha": args.alpha,
         "beta": args.beta,
         "gamma": args.gamma

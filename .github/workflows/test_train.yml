@@ -5,9 +5,12 @@ on:
     paths:
       - '!README.md'
       - 'src/**.py'
+      - 'src/models/**.py'
+      - 'src/scripts/**.sh'
       - 'utils/**.py'
       - '.github/workflows/**.yml'
       - '**.py'
+      - 'requirements.txt'
     branches:
       - 'main'
       - 'dev'
@@ -17,7 +20,12 @@ on:
     paths:
       - '!README.md'
       - 'src/**.py'
+      - 'src/models/**.py'
+      - 'src/scripts/**.sh'
       - 'utils/**.py'
+      - '.github/workflows/**.yml'
+      - '**.py'
+      - 'requirements.txt'
     branches:
       - 'main'
       - 'dev'
@@ -54,5 +62,5 @@ jobs:
       - name: List files
         run: ls
 
-      - name: Test
-        run: python3 tests/inference_test.py
+      - name: Running training script
+        run: ./scripts/train_test
