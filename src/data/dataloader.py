@@ -19,8 +19,8 @@ class STDataset(Dataset):
     def __getitem__(self, idx):
         content_url = self.content_urls[idx]
         # Randomly choose style for the image
-        # style_url = random.choice(self.style_urls)
-        style_url = r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\888440.jpg'
+        style_url = random.choice(self.style_urls)
+        # style_url = r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\888440.jpg'
         # style_url = self.style_urls[idx]
 
         content_image = Image.open(content_url).convert('RGB')
