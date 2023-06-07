@@ -16,8 +16,8 @@ import wandb
 from PIL import Image
 from typing import List
 
-from src.models.losses import style_loss, total_variation_loss
-from src.models.losses import mse_loss as content_loss
+from src.models.losses import StyleLoss, TVLoss
+from torch.nn import MSELoss as ContentLoss
 
 from src.models.generator import Generator
 from src.models.discriminator import Discriminator
@@ -31,15 +31,15 @@ class Trainer:
     def __init__(self,
                  dataloaders,
                  output_dir: str,
-                 lr_scheduler_type,
+                 lr_scheduler_type: str,
                  resume_from_checkpoint,
-                 seed,
-                 num_train_epochs,
+                 seed: int,
+                 num_train_epochs: int,
                  weight_decay,
-                 per_device_batch_size,
-                 gradient_accumulation_steps,
-                 do_eval_per_epoch,
-                 learning_rate,
+                 per_device_batch_size: int,
+                 gradient_accumulation_steps: int,
+                 do_eval_per_epoch: bool,
+                 learning_rate: float,
                  alpha: float,
                  beta: float,
                  gamma: float,
@@ -70,6 +70,10 @@ class Trainer:
         self.num_train_epochs = num_train_epochs
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        self.variation_loss = TVLoss()
+        self.style_loss = StyleLoss()
+        self.content_loss = ContentLoss()
 
         if self.with_tracking:
             # Initialize tracker
@@ -128,19 +132,19 @@ class Trainer:
         # Compute content loss
         losses = []
         for feature in content_features:
-            loss = content_loss(feature['orginal'], feature['model_output'])
+            loss = self.content_loss(feature['orginal'], feature['model_output'])
             losses.append(loss)
-        loss_content = sum(losses) / len(losses)
+        loss_content = sum(losses)
 
         # Compute style loss
         losses = []
         for feature in style_features:
-            loss = style_loss(feature['orginal'], feature['model_output'])
+            loss = self.style_loss(feature['orginal'], feature['model_output'])
             losses.append(loss)
         loss_style = sum(losses)
 
         # Compute variation loss
-        variation_loss = total_variation_loss(stylized_output)
+        variation_loss = self.variation_loss(stylized_output)
 
         # Compute total loss
         total_loss = self.alpha * loss_content \

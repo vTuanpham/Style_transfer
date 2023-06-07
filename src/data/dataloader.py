@@ -36,14 +36,14 @@ class STDataset(Dataset):
 
 class STDataloader:
     def __init__(self,
-                 content_datapath,
-                 style_datapath,
-                 batch_size,
+                 content_datapath: str,
+                 style_datapath: str,
+                 batch_size: int,
                  transform,
-                 max_style_train_samples,
-                 max_content_train_samples,
-                 max_eval_samples,
-                 seed):
+                 max_style_train_samples: int,
+                 max_content_train_samples: int,
+                 max_eval_samples: int,
+                 seed: int):
         self.batch_size = batch_size
         self.transform = transform
         self.seed = seed
