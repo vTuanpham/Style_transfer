@@ -16,7 +16,7 @@ import wandb
 from PIL import Image
 from typing import List
 
-from src.models.losses import StyleLoss, TVLoss
+from src.models.losses import StyleLoss, TVLoss, HistLoss
 from torch.nn import MSELoss as ContentLoss
 
 from src.models.generator import Encoder, Decoder
@@ -46,6 +46,7 @@ class Trainer:
                  login_key: str,
                  vgg_model_type: str = '19',
                  with_tracking: bool = False,
+                 delta: float = 2,
                  content_layers_idx: List[int] = [25, 30, 34],
                  style_layers_idx: List[int] = [14, 19, 25, 28, 34],
                  num_res_block: int = 20,
@@ -59,6 +60,7 @@ class Trainer:
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
+        self.delta = delta
         self.with_tracking = with_tracking
         self.login_key = login_key if with_tracking else None
         self.vgg_model_type = vgg_model_type
@@ -74,6 +76,7 @@ class Trainer:
         self.variation_loss = TVLoss()
         self.style_loss = StyleLoss()
         self.content_loss = ContentLoss()
+        self.hist_loss = HistLoss()
 
         if self.with_tracking:
             # Initialize tracker
@@ -129,7 +132,7 @@ class Trainer:
 
         return encoder, decoder, transformer, content_extractors, style_extractors
 
-    def compute_loss(self, content_features, style_features, stylized_output):
+    def compute_loss(self, content_features, style_features, stylized_outputs, style_imgs):
         # Compute content loss
         losses = []
         for feature in content_features:
@@ -145,14 +148,18 @@ class Trainer:
         loss_style = sum(losses)
 
         # Compute variation loss
-        variation_loss = self.variation_loss(stylized_output)
+        variation_loss = self.variation_loss(stylized_outputs)
+
+        # Compute hist loss
+        histogram_loss = self.hist_loss(stylized_outputs, style_imgs)
 
         # Compute total loss
         total_loss = self.alpha * loss_content \
                      + self.beta * loss_style + \
-                     self.gamma * variation_loss
+                     self.gamma * variation_loss \
+                     + self.delta * histogram_loss
 
-        return loss_content, loss_style, variation_loss, total_loss
+        return loss_content, loss_style, variation_loss, histogram_loss, total_loss
 
     def train(self):
         encoder, decoder, transformer, content_extractors, style_extractors = self.build_model()
@@ -160,18 +167,17 @@ class Trainer:
         # Define the optimizer
         transformer_optimizer  = optim.Adam(transformer.parameters(), lr=self.learning_rate)
 
-        scheduler = lr_scheduler.LinearLR(transformer_optimizer, start_factor=1.0, end_factor=0.5, total_iters=30)
+        # Define the learning rate scheduler
+        scheduler = lr_scheduler.LambdaLR(transformer_optimizer, lr_lambda=lambda epoch: 0.1 ** (epoch / 10))
 
         transformer.train()
 
         # Training loop
         loss_list = []
-        for epoch in tqdm.tqdm(range(self.num_train_epochs)):
-            for step, batch in enumerate(self.dataloaders):
+        for epoch in tqdm.tqdm(range(self.num_train_epochs), colour='green', position=0):
+            for step, batch in enumerate(tqdm.tqdm(self.dataloaders, colour='blue', position=1)):
                 content_imgs = batch['content_image'].to(self.device)
                 style_imgs = batch['style_image'].to(self.device)
-
-
 
                 # Encode images
                 encode_Cfeatures = encoder(content_imgs)
@@ -180,31 +186,38 @@ class Trainer:
                 transformed_features = transformer(encode_Cfeatures, encode_Sfeatures)
 
                 # Decode features
-                decode_img = decoder(transformed_features)
+                decode_imgs = decoder(transformed_features)
 
                 # Extract features from VGG19 for content and style images
                 content_features = []
                 org_output_features = list(content_extractors(content_imgs).values())
-                gen_output_features = list(content_extractors(decode_img).values())
+                gen_output_features = list(content_extractors(decode_imgs).values())
                 for layer_idx in range(len(self.content_layers_idx)):
                     content_features.append({"orginal": org_output_features[layer_idx],
                                              "model_output": gen_output_features[layer_idx]})
 
                 style_features = []
                 org_output_features = list(style_extractors(style_imgs).values())
-                gen_output_features = list(style_extractors(decode_img).values())
+                gen_output_features = list(style_extractors(decode_imgs).values())
                 for layer_idx in range(len(self.style_layers_idx)):
                     style_features.append({"orginal": org_output_features[layer_idx],
                                              "model_output": gen_output_features[layer_idx]})
 
-                loss_content, loss_style, variation_loss, total_loss = self.compute_loss(content_features,
-                                                                                        style_features, decode_img)
+                loss_content, loss_style, variation_loss, histogram_loss, total_loss = self.compute_loss(content_features,
+                                                                                        style_features,
+                                                                                         decode_imgs,
+                                                                                         style_imgs)
+
+                del content_features, style_features, encode_Cfeatures, encode_Sfeatures
 
                 # Backpropagation and optimization
                 transformer_optimizer.zero_grad()
                 total_loss.backward()
                 transformer_optimizer.step()
-                scheduler.step()
+
+
+            # Update learning rate
+            scheduler.step()
 
             loss_list.append(float(total_loss.item()))
             # Print the loss for monitoring
@@ -214,6 +227,7 @@ class Trainer:
                   f"\n Loss content: {loss_content} | Contributed content loss: {loss_content*self.alpha}"
                   f"\n Loss style: {loss_style} | Contributed style loss: {loss_style*self.beta}"
                   f"\n Loss variation: {variation_loss} | Contributed variation loss: {variation_loss*self.gamma}"
+                  f"\n Loss histogram: {histogram_loss} | Contributed histogram loss: {histogram_loss*self.delta}"
                   f"\n Minimum loss of overall training session: {min(loss_list)} \n")
 
             if self.with_tracking:
@@ -221,6 +235,7 @@ class Trainer:
                 self.wandb.log({"Loss_content_contributed": loss_content*self.alpha,
                                 "Loss_style_contributed": loss_style*self.beta,
                                 "Loss_variation_contributed": variation_loss*self.gamma,
+                                "Loss_histogram_contributed": histogram_loss*self.delta,
                                 "Total_loss": float(total_loss.item()),
                                 "Min_loss": min(loss_list)}, step=epoch)
 

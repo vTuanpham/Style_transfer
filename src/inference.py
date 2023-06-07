@@ -5,11 +5,12 @@ import torch
 import argparse
 from random import random
 from PIL import Image
+import matplotlib.pyplot as plt
+import numpy as np
 from src.models.generator import Encoder, Decoder
 from src.models.transformer import MTranspose
 from src.utils.image_plot import plot_image
 import torchvision.transforms as transforms
-
 
 
 def parse_args(args):
@@ -88,12 +89,13 @@ decoder = Decoder().eval().to(device)
 
 transformer = MTranspose(matrix_size=32).to(device)
 
-checkpoint = torch.load(r"./src/models/checkpoints/TotalL_421.02252197265625_Content_5.210962295532227_Style_296.22662353515625/transformer.pth")
+checkpoint = torch.load(r"./src/models/checkpoints/TotalL_583.1285400390625_Content_5.456900596618652_Style_411.40655517578125/transformer.pth")
 transformer.load_state_dict(checkpoint)
 
-content_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im99.jpg').convert('RGB')
+content_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im40.jpg').convert('RGB')
 style_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\888440.jpg').convert('RGB')
 trans = transforms.Compose([
+            # transforms.Resize((64, 64)),
             transforms.ToTensor()
         ])
 content_tensor = trans(content_image).to(device)
@@ -103,8 +105,40 @@ encode_Cfeatures = encoder(content_tensor.unsqueeze(0))
 encode_Sfeatures = encoder(style_tensor.unsqueeze(0))
 transformed_features = transformer(encode_Cfeatures, encode_Sfeatures)
 decode_img = decoder(transformed_features)
-plot_image(decode_img.detach().cpu())
-plot_image(style_tensor.unsqueeze(0).detach().cpu())
+
+# Convert tensor images to numpy arrays and adjust their shape if needed
+image1_np = content_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()  # Adjust dimensions as per your tensor shape
+image2_np = decode_img.squeeze().permute(1, 2, 0).detach().cpu().numpy() # Adjust dimensions as per your tensor shape
+image3_np = style_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()
+
+# Create a figure with subplots
+fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(10, 4))
+
+# Plot each image on a separate subplot
+axes[0].imshow(image1_np)
+axes[0].set_title('Content')
+axes[0].axis('off')
+
+axes[1].imshow(image2_np)
+axes[1].set_title('Style')
+axes[1].axis('off')
+
+axes[2].imshow(image3_np)
+axes[2].set_title('Stylized content')
+axes[2].axis('off')
+
+# Adjust the spacing between subplots
+plt.tight_layout()
+
+# Save the figure
+plt.savefig('image_plot.png')  # Specify the desired file name and extension
+
+# Show the figure (optional)
+plt.show()
+
+# plot_image(content_tensor.detach().cpu())
+# plot_image(decode_img.detach().cpu())
+# plot_image(style_tensor.unsqueeze(0).detach().cpu())
 # Convert the tensor back to an image
 final_image = transforms.ToPILImage()(decode_img.squeeze(0).detach().cpu())
 
