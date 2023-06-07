@@ -19,8 +19,8 @@ from typing import List
 from src.models.losses import StyleLoss, TVLoss
 from torch.nn import MSELoss as ContentLoss
 
-from src.models.generator import Generator
-from src.models.discriminator import Discriminator
+from src.models.generator import Encoder, Decoder
+from src.models.transformer import MTranspose
 from src.utils.image_plot import plot_image
 
 
@@ -119,14 +119,15 @@ class Trainer:
         return feature_extractors
 
     def build_model(self):
-        generator = Generator(num_res_block=self.num_res_block,
-                              num_deep_res_block=self.num_deep_res_block).to(self.device)
-        discriminator = Discriminator().to(self.device)
+        encoder = Encoder().eval().to(self.device)
+        decoder = Decoder().eval().to(self.device)
+
+        transformer = MTranspose(matrix_size=32).to(self.device)
 
         content_extractors = self.get_feature_extractor(self.content_layers_idx, device=self.device)
         style_extractors = self.get_feature_extractor(self.style_layers_idx, device=self.device)
 
-        return generator, discriminator, content_extractors, style_extractors
+        return encoder, decoder, transformer, content_extractors, style_extractors
 
     def compute_loss(self, content_features, style_features, stylized_output):
         # Compute content loss
@@ -154,15 +155,14 @@ class Trainer:
         return loss_content, loss_style, variation_loss, total_loss
 
     def train(self):
+        encoder, decoder, transformer, content_extractors, style_extractors = self.build_model()
 
-        img_generator, discriminator, content_extractors, style_extractors = self.build_model()
         # Define the optimizer
-        generator_optimizer  = optim.Adam(img_generator.parameters(), lr=self.learning_rate)
-        discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=self.learning_rate, betas=(0.5, 0.999))
+        transformer_optimizer  = optim.Adam(transformer.parameters(), lr=self.learning_rate)
 
-        scheduler = lr_scheduler.LinearLR(generator_optimizer, start_factor=1.0, end_factor=0.5, total_iters=30)
+        scheduler = lr_scheduler.LinearLR(transformer_optimizer, start_factor=1.0, end_factor=0.5, total_iters=30)
 
-        img_generator.train()
+        transformer.train()
 
         # Training loop
         loss_list = []
@@ -171,35 +171,39 @@ class Trainer:
                 content_imgs = batch['content_image'].to(self.device)
                 style_imgs = batch['style_image'].to(self.device)
 
-                # Stack content and style in the channels dim so the generator have
-                # some context of what to style the content on (batch, channels, width, height)
-                stacked_images = torch.cat((content_imgs, style_imgs), dim=1)
 
-                # Generate stylized output
-                stylized_output = img_generator(stacked_images)
+
+                # Encode images
+                encode_Cfeatures = encoder(content_imgs)
+                encode_Sfeatures = encoder(style_imgs)
+
+                transformed_features = transformer(encode_Cfeatures, encode_Sfeatures)
+
+                # Decode features
+                decode_img = decoder(transformed_features)
 
                 # Extract features from VGG19 for content and style images
                 content_features = []
                 org_output_features = list(content_extractors(content_imgs).values())
-                gen_output_features = list(content_extractors(stylized_output).values())
+                gen_output_features = list(content_extractors(decode_img).values())
                 for layer_idx in range(len(self.content_layers_idx)):
                     content_features.append({"orginal": org_output_features[layer_idx],
                                              "model_output": gen_output_features[layer_idx]})
 
                 style_features = []
                 org_output_features = list(style_extractors(style_imgs).values())
-                gen_output_features = list(style_extractors(stylized_output).values())
+                gen_output_features = list(style_extractors(decode_img).values())
                 for layer_idx in range(len(self.style_layers_idx)):
                     style_features.append({"orginal": org_output_features[layer_idx],
                                              "model_output": gen_output_features[layer_idx]})
 
                 loss_content, loss_style, variation_loss, total_loss = self.compute_loss(content_features,
-                                                                                        style_features, stylized_output)
+                                                                                        style_features, decode_img)
 
                 # Backpropagation and optimization
-                generator_optimizer.zero_grad()
+                transformer_optimizer.zero_grad()
                 total_loss.backward()
-                generator_optimizer.step()
+                transformer_optimizer.step()
                 scheduler.step()
 
             loss_list.append(float(total_loss.item()))
@@ -222,7 +226,7 @@ class Trainer:
 
             if float(total_loss.item()) == min(loss_list):
                 print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
-                self.save(img_generator, loss_info={"total": float(total_loss.item()),
+                self.save(transformer, loss_info={"total": float(total_loss.item()),
                                                     "content": loss_content,
                                                     "style": loss_style})
             else:
@@ -232,7 +236,7 @@ class Trainer:
         if self.with_tracking:
             self.wandb.finish()
 
-    def save(self, generator, discriminator=None, loss_info=None):
+    def save(self, transformer, discriminator=None, loss_info=None):
         dir_name = f"TotalL_{loss_info['total']}_Content_{loss_info['content']}_Style_{loss_info['style']}"
         save_path_dir = os.path.join(self.output_dir, dir_name)
         print(f" Saving in {save_path_dir}")
@@ -241,8 +245,8 @@ class Trainer:
         else:
             raise FileExistsError
 
-        model_path = os.path.join(save_path_dir, f"generator" + ".pth")
-        torch.save(generator.state_dict(), model_path)
+        model_path = os.path.join(save_path_dir, f"transformer" + ".pth")
+        torch.save(transformer.state_dict(), model_path)
 
         if discriminator is not None:
             model_path = os.path.join(self.output_dir, "discriminator" + ".pth")

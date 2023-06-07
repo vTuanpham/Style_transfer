@@ -1,122 +1,14 @@
+import sys
+sys.path.insert(0,r'./')
 import numpy as np
 from typing import Tuple
+from functools import reduce
+from PIL import Image
 
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torchvision.models as models
 import torchvision.transforms as transforms
-
-
-# Define the generator network for stylized output
-class ResBlock(nn.Module):
-    def __init__(self):
-        super(ResBlock, self).__init__()
-        self.pad = SymmetricPadding2D()
-        self.conv1 = nn.Conv2d(64, 64, kernel_size=(5, 5), padding=0)
-        self.bn1 = nn.BatchNorm2d(64, momentum=0.5)
-        self.conv2 = nn.Conv2d(64, 64, kernel_size=(3, 3), padding=0)
-        self.bn2 = nn.BatchNorm2d(64, momentum=0.5)
-        self.prelu = nn.PReLU()
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=(3, 3), padding=0)
-        self.bn3 = nn.BatchNorm2d(64, momentum=0.5)
-
-    def forward(self, ip):
-        res_model = self.pad(ip)
-        res_model = self.pad(res_model)
-        res_model = self.conv1(res_model)
-        res_model = self.bn1(res_model)
-
-        res_model = self.pad(res_model)
-        res_model = self.conv2(res_model)
-        res_model = self.bn2(res_model)
-        res_model = self.prelu(res_model)
-
-        res_model = self.pad(res_model)
-        res_model = self.conv3(res_model)
-        res_model = self.bn3(res_model)
-
-        return ip + res_model
-
-
-class DeepResBlock(nn.Module):
-    def __init__(self):
-        super(DeepResBlock, self).__init__()
-        self.pad = SymmetricPadding2D()
-        self.conv1 = nn.Conv2d(64, 256, kernel_size=(3, 3), padding=0)
-        self.prelu1 = nn.PReLU()
-        self.conv2 = nn.Conv2d(256, 64, kernel_size=(3, 3), padding=0)
-        self.bn = nn.BatchNorm2d(64, momentum=0.5)
-        # self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
-        self.prelu2 = nn.PReLU()
-
-    def forward(self, ip):
-        up_model = self.pad(ip)
-        up_model = self.conv1(up_model)
-        up_model = self.prelu1(up_model)
-
-        up_model = self.pad(up_model)
-        up_model = self.conv2(up_model)
-        up_model = self.bn(up_model)
-        # up_model = self.upsample(up_model)
-        up_model = self.prelu2(up_model)
-
-        return up_model
-
-
-class Generator(nn.Module):
-    def __init__(self, num_res_block, num_deep_res_block):
-        super(Generator, self).__init__()
-        self.pad = SymmetricPadding2D()
-        self.conv1 = nn.Conv2d(6, 64, kernel_size=(9, 9), padding=0)
-        self.prelu1 = nn.PReLU()
-        self.conv2 = nn.Conv2d(64, 64, kernel_size=(5, 5), padding=0)
-        self.prelu2 = nn.PReLU()
-
-        self.res_blocks = nn.ModuleList([ResBlock() for _ in range(num_res_block)])
-
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=(3, 3), padding=0)
-        self.bn = nn.BatchNorm2d(64, momentum=0.5)
-
-        self.deep_res_blocks = nn.ModuleList([DeepResBlock() for _ in range(num_deep_res_block)])
-
-        self.conv4 = nn.Conv2d(64, 3, kernel_size=(9, 9), padding=0)
-
-    def forward(self, gen_ip):
-        layers = self.pad(gen_ip)
-        layers = self.pad(layers)
-        layers = self.pad(layers)
-        layers = self.pad(layers)
-        layers = self.conv1(layers)
-        layers = self.prelu1(layers)
-
-        layers = self.pad(layers)
-        layers = self.pad(layers)
-        layers = self.conv2(layers)
-        layers = self.prelu2(layers)
-
-        temp = layers
-
-        for res_block in self.res_blocks:
-            layers = res_block(layers)
-
-        layers = self.pad(layers)
-        layers = self.conv3(layers)
-        layers = self.bn(layers)
-
-        layers = layers + temp
-
-        for deep_res_block in self.deep_res_blocks:
-            layers = deep_res_block(layers)
-
-        layers = self.pad(layers)
-        layers = self.pad(layers)
-        layers = self.pad(layers)
-        layers = self.pad(layers)
-
-        op = self.conv4(layers)
-
-        return op
 
 
 # Custom layer inherited from nn.Module
@@ -146,3 +38,90 @@ class SymmetricPadding2D(nn.Module):
         y_pad = reflect(y_idx, -0.5, h - 0.5)
         xx, yy = np.meshgrid(x_pad, y_pad)
         return im[..., yy, xx]
+
+
+class Encoder(nn.Module):
+	def __init__(self):
+		super(Encoder, self).__init__()
+		self.encode = nn.Sequential( # Sequential,
+			nn.Conv2d(3,3,(1, 1)),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(3,64,(3, 3)),
+			nn.ReLU(),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(64,64,(3, 3)),
+			nn.ReLU(),
+			nn.MaxPool2d((2, 2),(2, 2),(0, 0),ceil_mode=True),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(64,128,(3, 3)),
+			nn.ReLU(),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(128,128,(3, 3)),
+			nn.ReLU(),
+			nn.MaxPool2d((2, 2),(2, 2),(0, 0),ceil_mode=True),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(128,256,(3, 3)),
+			nn.ReLU(),
+		)
+		self.encode.load_state_dict(torch.load(r'./src/models/checkpoints/WCT_encoder_decoder/vgg_normalised_conv3_1.pth'))
+
+	def forward(self, x):
+		out = self.encode(x)
+		return out
+
+
+class Decoder(nn.Module):
+	def __init__(self):
+		super(Decoder, self).__init__()
+		self.decoder = nn.Sequential(  # Sequential,
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(256, 128, (3, 3)),
+			nn.ReLU(),
+			nn.UpsamplingNearest2d(scale_factor=2),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(128, 128, (3, 3)),
+			nn.ReLU(),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(128, 64, (3, 3)),
+			nn.ReLU(),
+			nn.UpsamplingNearest2d(scale_factor=2),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(64, 64, (3, 3)),
+			nn.ReLU(),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(64, 3, (3, 3)),
+		)
+		self.decoder.load_state_dict(torch.load(r"./src/models/checkpoints/WCT_encoder_decoder/feature_invertor_conv3_1.pth"))
+
+	def forward(self, x):
+		out = self.decoder(x)
+		return out
+
+
+if __name__ == "__main__":
+	vgg = Encoder()
+	dec = Decoder()
+
+	vgg.eval()
+	dec.eval()
+	# Load and preprocess the input image
+	image_path = r'./src/data/dummy/content/im1.jpg'  # Replace with your image path
+	image = Image.open(image_path)
+	preprocess = transforms.Compose([
+		# transforms.Resize((256, 256)),  # Resize to match the input size of the model
+		transforms.ToTensor(),  # Convert PIL image to tensor
+	])
+	input_tensor = preprocess(image)
+	input_batch = input_tensor.unsqueeze(0)  # Add batch dimension
+
+	# Run the encoder and decoder
+	with torch.no_grad():
+		encoded_features = vgg(input_batch)
+		reconstructed_image = dec(encoded_features)
+
+	# Convert the output tensor to a PIL image
+	output_image = transforms.ToPILImage()(reconstructed_image.squeeze(0).cpu())
+
+	# Display the input and reconstructed images
+	image.show(title='Input Image')
+	output_image.show(title='Reconstructed Image')

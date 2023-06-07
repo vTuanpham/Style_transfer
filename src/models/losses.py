@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class GramMatrix(nn.Module):
-    def forward(self,input):
+    def forward(self, input):
         b, c, h, w = input.size()
         f = input.view(b,c,h*w) # bxcx(hxw)
         # torch.bmm(batch1, batch2, out=None)   #
@@ -19,7 +19,7 @@ class StyleLoss(nn.Module):
         self.G = GramMatrix()
         self.mse_loss = nn.MSELoss(size_average=False)
 
-    def forward(self,input,target):
+    def forward(self, input, target):
         ib,ic,ih,iw = input.size()
         iF = input.view(ib,ic,-1)
         iMean = torch.mean(iF,dim=2)
