@@ -81,11 +81,11 @@ import torchvision.transforms as transforms
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 style_img_generator = Generator(num_res_block=20, num_deep_res_block=2).to(device)
-checkpoint = torch.load(r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\models\checkpoints\TotalL_14.296285629272461_Content_2.1988682746887207_Style_0.16542977094650269\generator.pth")
+checkpoint = torch.load(r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\models\checkpoints\TotalL_4.384126663208008_Content_1.4945733547210693_Style_6.834507942199707\generator.pth")
 
 style_img_generator.load_state_dict(checkpoint)
 content_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im20.jpg').convert('RGB')
-style_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\888440.jpg').convert('RGB')
+style_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\972994.jpg').convert('RGB')
 trans = transforms.Compose([
             transforms.Resize((64, 64)),
             transforms.ToTensor()

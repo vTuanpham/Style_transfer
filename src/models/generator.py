@@ -1,3 +1,6 @@
+import numpy as np
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -118,19 +121,28 @@ class Generator(nn.Module):
 
 # Custom layer inherited from nn.Module
 class SymmetricPadding2D(nn.Module):
-    def __init__(self, padding=[1, 1], data_format="channels_first"):
+    def __init__(self, padding: Tuple[int, int, int, int] = (1, 1, 1, 1)):  # left, right, top, bottom
         super(SymmetricPadding2D, self).__init__()
         self.padding = padding
-        self.data_format = data_format
 
-    def forward(self, inputs):
-        if self.data_format == "channels_last":
-            # (batch, height, width, channels)
-            pad = nn.ReflectionPad2d(self.padding)
-        elif self.data_format == "channels_first":
-            # (batch, channels, height, width)
-            pad = nn.ReflectionPad2d([self.padding[1], self.padding[1], self.padding[0], self.padding[0]])
-        else:
-            raise ValueError("Invalid data format. Expected 'channels_last' or 'channels_first'.")
+    def forward(self, im: torch.Tensor):
+        h, w = im.shape[-2:]
+        left, right, top, bottom = self.padding
 
-        return pad(inputs)
+        x_idx = np.arange(-left, w + right)
+        y_idx = np.arange(-top, h + bottom)
+
+        def reflect(x, minx, maxx):
+            """ Reflects an array around two points making a triangular waveform that ramps up
+            and down, allowing for pad lengths greater than the input length """
+            rng = maxx - minx
+            double_rng = 2 * rng
+            mod = np.fmod(x - minx, double_rng)
+            normed_mod = np.where(mod < 0, mod + double_rng, mod)
+            out = np.where(normed_mod >= rng, double_rng - normed_mod, normed_mod) + minx
+            return np.array(out, dtype=x.dtype)
+
+        x_pad = reflect(x_idx, -0.5, w - 0.5)
+        y_pad = reflect(y_idx, -0.5, h - 0.5)
+        xx, yy = np.meshgrid(x_pad, y_pad)
+        return im[..., yy, xx]

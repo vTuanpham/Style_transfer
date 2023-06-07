@@ -71,7 +71,11 @@ def main(args):
         "batch_size": args.batch_size,
         "transform": transforms.Compose([
             transforms.Resize((args.width, args.height)),
-            transforms.ToTensor()
+            transforms.ToTensor(),
+            transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.5),
+            transforms.ColorJitter(brightness=0.35, contrast=0.4, saturation=0.37, hue=0.42),
+            transforms.RandomHorizontalFlip(p=0.5),
+            # transforms.CenterCrop()
         ]),
         "max_style_train_samples": args.max_style_train_samples,
         "max_content_train_samples": args.max_content_train_samples,
