@@ -50,19 +50,21 @@ jobs:
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
 
+      - name: Cache pip dependencies
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
       - name: Install Python dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           python3 -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install wandb
           pip install matplotlib
-
-      - name: Cache pip dependencies
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: ${{ runner.os }}-pip-
 
       - name: List files
         run: ls
