@@ -1,88 +1,127 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torchvision.models as models
-import torchvision.transforms as transforms
+import sys
+sys.path.insert(0,r'./')
+import numpy as np
+from typing import Tuple
+from functools import reduce
 from PIL import Image
 
-
-# Define the generator network for stylized output
-class Generator(nn.Module):
-    def __init__(self, num_residual: int):
-        super(Generator, self).__init__()
-
-        # Initial convolutional layer
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=9, stride=1, padding=4)
-        self.relu1 = nn.ReLU()
-
-        # Downsampling layers
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)
-        self.relu2 = nn.ReLU()
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1)
-        self.relu3 = nn.ReLU()
-
-        # Residual blocks
-        self.residual_blocks = nn.Sequential(
-            ResidualBlock(128, num_residual=num_residual)
-        )
-
-        # Upsampling layers
-        self.conv4 = nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.relu4 = nn.ReLU()
-        self.conv5 = nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.relu5 = nn.ReLU()
-
-        # Final convolutional layer
-        self.conv6 = nn.Conv2d(32, 3, kernel_size=9, stride=1, padding=4)
-
-    def forward(self, x):
-        x = self.relu1(self.conv1(x))
-        x = self.relu2(self.conv2(x))
-        x = self.relu3(self.conv3(x))
-        x = self.residual_blocks(x)
-        x = self.relu4(self.conv4(x))
-        x = self.relu5(self.conv5(x))
-        x = self.conv6(x)
-        return x
-
-
-# Define the residual block
-class ResidualBlock(nn.Module):
-    def __init__(self, channels, num_residual: int):
-        super(ResidualBlock, self).__init__()
-        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
-        self.relu1 = nn.ReLU()
-        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
-        self.relu2 = nn.ReLU()
-
-        self.num_residual = num_residual
-
-    def forward(self, x):
-        for layer in range(self.num_residual):
-            residual = x
-            x = self.relu1(self.conv1(x))
-            x = self.relu2(self.conv2(x))
-            x = x + residual  # Element-wise addition with the residual
-        return x
+import torch
+import torch.nn as nn
+import torchvision.models as models
+import torchvision.transforms as transforms
 
 
 # Custom layer inherited from nn.Module
 class SymmetricPadding2D(nn.Module):
-    def __init__(self, output_dim=1, padding=[1, 1], data_format="NCHW"):
+    def __init__(self, padding: Tuple[int, int, int, int] = (1, 1, 1, 1)):  # left, right, top, bottom
         super(SymmetricPadding2D, self).__init__()
-        self.output_dim = output_dim
-        self.data_format = data_format
         self.padding = padding
 
-    def forward(self, inputs):
-        if self.data_format == "NCHW":
-            pad = (0, 0, 0, 0) + tuple(self.padding)
-        elif self.data_format == "NHWC":
-            pad = (0, 0) + tuple(self.padding) + (0, 0)
+    def forward(self, im: torch.Tensor):
+        h, w = im.shape[-2:]
+        left, right, top, bottom = self.padding
 
-        out = nn.functional.pad(inputs, pad, mode="reflect")
-        return out
+        x_idx = np.arange(-left, w + right)
+        y_idx = np.arange(-top, h + bottom)
 
-    def extra_repr(self):
-        return "output_dim={}, padding={}, data_format={}".format(
-            self.output_dim, self.padding, self.data_format)
+        def reflect(x, minx, maxx):
+            """ Reflects an array around two points making a triangular waveform that ramps up
+            and down, allowing for pad lengths greater than the input length """
+            rng = maxx - minx
+            double_rng = 2 * rng
+            mod = np.fmod(x - minx, double_rng)
+            normed_mod = np.where(mod < 0, mod + double_rng, mod)
+            out = np.where(normed_mod >= rng, double_rng - normed_mod, normed_mod) + minx
+            return np.array(out, dtype=x.dtype)
+
+        x_pad = reflect(x_idx, -0.5, w - 0.5)
+        y_pad = reflect(y_idx, -0.5, h - 0.5)
+        xx, yy = np.meshgrid(x_pad, y_pad)
+        return im[..., yy, xx]
+
+
+class Encoder(nn.Module):
+	def __init__(self):
+		super(Encoder, self).__init__()
+		self.encode = nn.Sequential( # Sequential,
+			nn.Conv2d(3,3,(1, 1)),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(3,64,(3, 3)),
+			nn.ReLU(),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(64,64,(3, 3)),
+			nn.ReLU(),
+			nn.MaxPool2d((2, 2),(2, 2),(0, 0),ceil_mode=True),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(64,128,(3, 3)),
+			nn.ReLU(),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(128,128,(3, 3)),
+			nn.ReLU(),
+			nn.MaxPool2d((2, 2),(2, 2),(0, 0),ceil_mode=True),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(128,256,(3, 3)),
+			nn.ReLU(),
+		)
+		self.encode.load_state_dict(torch.load(r'./src/models/checkpoints/WCT_encoder_decoder/vgg_normalised_conv3_1.pth'))
+
+	def forward(self, x):
+		out = self.encode(x)
+		return out
+
+
+class Decoder(nn.Module):
+	def __init__(self):
+		super(Decoder, self).__init__()
+		self.decoder = nn.Sequential(  # Sequential,
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(256, 128, (3, 3)),
+			nn.ReLU(),
+			nn.UpsamplingNearest2d(scale_factor=2),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(128, 128, (3, 3)),
+			nn.ReLU(),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(128, 64, (3, 3)),
+			nn.ReLU(),
+			nn.UpsamplingNearest2d(scale_factor=2),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(64, 64, (3, 3)),
+			nn.ReLU(),
+			SymmetricPadding2D((1, 1, 1, 1)),
+			nn.Conv2d(64, 3, (3, 3)),
+		)
+		self.decoder.load_state_dict(torch.load(r"./src/models/checkpoints/WCT_encoder_decoder/feature_invertor_conv3_1.pth"))
+
+	def forward(self, x):
+		out = self.decoder(x)
+		return out
+
+
+if __name__ == "__main__":
+	vgg = Encoder()
+	dec = Decoder()
+
+	vgg.eval()
+	dec.eval()
+	# Load and preprocess the input image
+	image_path = r'./src/data/dummy/content/im1.jpg'  # Replace with your image path
+	image = Image.open(image_path)
+	preprocess = transforms.Compose([
+		# transforms.Resize((256, 256)),  # Resize to match the input size of the model
+		transforms.ToTensor(),  # Convert PIL image to tensor
+	])
+	input_tensor = preprocess(image)
+	input_batch = input_tensor.unsqueeze(0)  # Add batch dimension
+
+	# Run the encoder and decoder
+	with torch.no_grad():
+		encoded_features = vgg(input_batch)
+		reconstructed_image = dec(encoded_features)
+
+	# Convert the output tensor to a PIL image
+	output_image = transforms.ToPILImage()(reconstructed_image.squeeze(0).cpu())
+
+	# Display the input and reconstructed images
+	image.show(title='Input Image')
+	output_image.show(title='Reconstructed Image')

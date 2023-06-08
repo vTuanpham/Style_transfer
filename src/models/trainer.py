@@ -1,3 +1,4 @@
+import random
 import sys
 import os
 sys.path.insert(0,r'./') #Add root directory here
@@ -8,117 +9,258 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 import torchvision.models as models
 import torchvision.transforms as transforms
+from torchvision.models._utils import IntermediateLayerGetter
 
 import tqdm
+import wandb
 from PIL import Image
+from typing import List
 
-from src.models.losses import style_loss, total_variation_loss, GramMatrix
-from src.models.losses import mse_loss as content_loss
+from src.models.losses import StyleLoss, TVLoss, HistLoss
+from torch.nn import MSELoss as ContentLoss
 
-from src.models.generator import Generator
-from src.models.discriminator import Discriminator
+from src.models.generator import Encoder, Decoder
+from src.models.transformer import MTranspose
+from src.utils.image_plot import plot_image
+
+
+PRJ_NAME = "Style_transfer"
 
 
 class Trainer:
     def __init__(self,
                  dataloaders,
                  output_dir: str,
-                 lr_scheduler_type,
                  resume_from_checkpoint,
-                 seed,
-                 with_tracking,
-                 report_to,
-                 num_train_epochs,
+                 seed: int,
+                 num_train_epochs: int,
                  weight_decay,
-                 per_device_batch_size,
-                 gradient_accumulation_steps,
-                 do_eval_per_epoch,
-                 learning_rate,
-                 vgg_model_type: str,
+                 per_device_batch_size: int,
+                 gradient_accumulation_steps: int,
+                 do_eval_per_epoch: bool,
+                 learning_rate: float,
                  alpha: float,
                  beta: float,
-                 gamma: float
+                 gamma: float,
+                 login_key: str,
+                 vgg_model_type: str = '19',
+                 with_tracking: bool = False,
+                 delta: float = 2,
+                 transformer_size: int = 32,
+                 content_layers_idx: List[int] = [26, 31, 35],
+                 style_layers_idx: List[int] = [13, 20, 26, 29, 35]
                  ):
 
+        self.output_dir = output_dir
         self.dataloaders = dataloaders.__call__()
-        self.learning_rate = learning_rate
-        self.vgg_model_type = vgg_model_type
+        self.per_device_batch_size = per_device_batch_size
+
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
+        self.delta = delta
+        self.with_tracking = with_tracking
+        self.login_key = login_key if with_tracking else None
+        self.vgg_model_type = vgg_model_type
+        self.learning_rate = learning_rate
+        self.content_layers_idx = content_layers_idx
+        self.style_layers_idx = style_layers_idx
         self.num_train_epochs = num_train_epochs
-        self.output_dir = output_dir
+        self.transformer_size = transformer_size
 
-    def get_feature_extractor(self):
-        if self.vgg_model_type == '19':
-            # Define the VGG19-based feature extractor
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        self.variation_loss = TVLoss()
+        self.style_loss = StyleLoss()
+        self.content_loss = ContentLoss()
+        self.hist_loss = HistLoss()
+
+        if self.with_tracking:
+            # Initialize tracker
+            self.wandb.login(self.login_key)
+            self.wandb = wandb.init(
+                project=PRJ_NAME,
+                # track hyperparameters and run metadata
+                config={
+                    "learning_rate": self.learning_rate,
+                    "feature_extractor": self.vgg_model_type,
+                    "loss_content_weight": self.alpha,
+                    "loss_style_weight": self.beta,
+                    "loss_variation_weight": self.gamma,
+                    "epochs": self.num_train_epochs,
+                    "content_layers_idx": self.content_layers_idx,
+                    "style_layers_idx": self.style_layers_idx,
+                    "device": self.device,
+                    "batch_size": self.per_device_batch_size
+                    }
+                )
+        else:
+            self.wandb = None
+
+    @staticmethod
+    def get_feature_extractor(selected_indices, vgg_model_type="16", device='cpu'):
+        if vgg_model_type == "16":
             vgg = models.vgg19(pretrained=True).features
-            vgg = nn.Sequential(*list(vgg.children())[:36]).eval()
-        if self.vgg_model_type == '16':
-            # Define the VGG16-based feature extractor
+        else:
             vgg = models.vgg16(pretrained=True).features
-            vgg = nn.Sequential(*list(vgg.children())[:36]).eval()
 
-        return vgg
+        layers = list(vgg.children())
+
+        if isinstance(selected_indices, list):
+            selected_layers = {str(idx): layers[idx] for idx in selected_indices if idx < len(layers)}
+            if len(selected_layers) != len(selected_indices):
+                raise ValueError("Invalid layer index provided.")
+        else:
+            raise ValueError("Selected indices should be provided as a list of layer indices.")
+
+        feature_extractors = IntermediateLayerGetter(vgg, return_layers=selected_layers).to(device)
+        return feature_extractors
 
     def build_model(self):
-        generator = Generator(num_residual=5)
-        vgg = self.get_feature_extractor()
+        encoder = Encoder().eval().to(self.device)
+        decoder = Decoder().eval().to(self.device)
 
-        return generator, vgg
+        transformer = MTranspose(matrix_size=self.transformer_size).to(self.device)
 
-    def compute_loss(self, content_features, style_features, stylized_features, stylized_output):
+        content_extractors = self.get_feature_extractor(self.content_layers_idx, device=self.device)
+        style_extractors = self.get_feature_extractor(self.style_layers_idx, device=self.device)
+
+        return encoder, decoder, transformer, content_extractors, style_extractors
+
+    def compute_loss(self, content_features, style_features, stylized_outputs, style_imgs):
         # Compute content loss
-        loss_content = content_loss(stylized_features, content_features)
+        losses = []
+        for feature in content_features:
+            loss = self.content_loss(feature['model_output'], feature['orginal'])
+            losses.append(loss)
+        loss_content = sum(losses)
+
         # Compute style loss
-        loss_style = style_loss(stylized_features, style_features)
+        losses = []
+        for feature in style_features:
+            loss = self.style_loss(feature['model_output'], feature['orginal'])
+            losses.append(loss)
+        loss_style = sum(losses)
 
         # Compute variation loss
-        variation_loss = total_variation_loss(stylized_output)
+        variation_loss = self.variation_loss(stylized_outputs)
+
+        # Compute hist loss
+        histogram_loss = self.hist_loss(stylized_outputs, style_imgs)
 
         # Compute total loss
         total_loss = self.alpha * loss_content \
                      + self.beta * loss_style + \
-                     self.gamma * variation_loss
+                     self.gamma * variation_loss \
+                     + self.delta * histogram_loss
 
-        return loss_content, loss_style, total_loss
+        return loss_content, loss_style, variation_loss, histogram_loss, total_loss
 
     def train(self):
-        img_generator, vgg = self.build_model()
+        encoder, decoder, transformer, content_extractors, style_extractors = self.build_model()
+
         # Define the optimizer
-        optimizer = optim.Adam(img_generator.parameters(), lr=self.learning_rate)
-        scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.5, total_iters=30)
+        transformer_optimizer  = optim.Adam(transformer.parameters(), lr=self.learning_rate)
+
+        # Define the learning rate scheduler
+        scheduler = lr_scheduler.LambdaLR(transformer_optimizer, lr_lambda=lambda epoch: 0.1 ** (epoch / 10))
+
+        transformer.train()
 
         # Training loop
-        for epoch in tqdm.tqdm(range(self.num_train_epochs)):
-            img_generator.train()
-            for step, batch in enumerate(self.dataloaders):
-                content_imgs = batch['content_image']
-                style_imgs = batch['style_image']
+        loss_list = []
+        for epoch in tqdm.tqdm(range(self.num_train_epochs), colour='green', position=0):
+            for step, batch in enumerate(tqdm.tqdm(self.dataloaders, colour='blue', position=1)):
+                content_imgs = batch['content_image'].to(self.device)
+                style_imgs = batch['style_image'].to(self.device)
 
-                # Generate stylized output
-                stylized_output = img_generator(content_imgs)
+                # Encode images
+                encode_Cfeatures = encoder(content_imgs)
+                encode_Sfeatures = encoder(style_imgs)
+
+                transformed_features = transformer(encode_Cfeatures, encode_Sfeatures)
+
+                # Decode features
+                decode_imgs = decoder(transformed_features)
 
                 # Extract features from VGG19 for content and style images
-                content_features = vgg(content_imgs)
-                style_features = vgg(style_imgs)
-                stylized_features = vgg(stylized_output)
+                content_features = []
+                org_output_features = list(content_extractors(content_imgs).values())
+                gen_output_features = list(content_extractors(decode_imgs).values())
+                for layer_idx in range(len(self.content_layers_idx)):
+                    content_features.append({"orginal": org_output_features[layer_idx],
+                                             "model_output": gen_output_features[layer_idx]})
 
-                loss_content, loss_style, total_loss = self.compute_loss(content_features, style_features, stylized_features, stylized_output)
+                style_features = []
+                org_output_features = list(style_extractors(style_imgs).values())
+                gen_output_features = list(style_extractors(decode_imgs).values())
+                for layer_idx in range(len(self.style_layers_idx)):
+                    style_features.append({"orginal": org_output_features[layer_idx],
+                                             "model_output": gen_output_features[layer_idx]})
+
+                loss_content, loss_style, variation_loss, histogram_loss, total_loss = self.compute_loss(content_features,
+                                                                                        style_features,
+                                                                                         decode_imgs,
+                                                                                         style_imgs)
+
+                del content_features, style_features, encode_Cfeatures, encode_Sfeatures
 
                 # Backpropagation and optimization
-                optimizer.zero_grad()
+                transformer_optimizer.zero_grad()
                 total_loss.backward()
-                optimizer.step()
-                scheduler.step()
+                transformer_optimizer.step()
 
+
+            # Update learning rate
+            scheduler.step()
+
+            loss_list.append(float(total_loss.item()))
             # Print the loss for monitoring
-            print(f"Epoch [{epoch + 1}/{self.num_train_epochs}], Total Loss: {total_loss.item()}")
-            self.save(img_generator)
+            print(f"\n --- Training log --- \n")
+            print(f"   Epoch [{epoch + 1}/{self.num_train_epochs}]"
+                  f"\n Total Loss: {total_loss.item()}"
+                  f"\n Loss content: {loss_content} | Contributed content loss: {loss_content*self.alpha}"
+                  f"\n Loss style: {loss_style} | Contributed style loss: {loss_style*self.beta}"
+                  f"\n Loss variation: {variation_loss} | Contributed variation loss: {variation_loss*self.gamma}"
+                  f"\n Loss histogram: {histogram_loss} | Contributed histogram loss: {histogram_loss*self.delta}"
+                  f"\n Minimum loss of overall training session: {min(loss_list)} \n")
 
-    def save(self, generator):
-        model_path = os.path.join(self.output_dir, "model" + ".pth")
-        torch.save(generator.state_dict(), model_path)
+            if self.with_tracking:
+                print("--- Logging to wandb ---")
+                self.wandb.log({"Loss_content_contributed": loss_content*self.alpha,
+                                "Loss_style_contributed": loss_style*self.beta,
+                                "Loss_variation_contributed": variation_loss*self.gamma,
+                                "Loss_histogram_contributed": histogram_loss*self.delta,
+                                "Total_loss": float(total_loss.item()),
+                                "Min_loss": min(loss_list)}, step=epoch)
+
+            if float(total_loss.item()) == min(loss_list):
+                print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
+                self.save(transformer, loss_info={"total": float(total_loss.item()),
+                                                    "content": loss_content,
+                                                    "style": loss_style})
+            else:
+                print(f"Discarding epoch [{epoch + 1}/{self.num_train_epochs}]")
+                continue
+
+        if self.with_tracking:
+            self.wandb.finish()
+
+    def save(self, transformer, discriminator=None, loss_info=None):
+        dir_name = f"TotalL_{loss_info['total']}_Content_{loss_info['content']}_Style_{loss_info['style']}"
+        save_path_dir = os.path.join(self.output_dir, dir_name)
+        print(f" Saving in {save_path_dir}")
+        if not os.path.exists(save_path_dir):
+            os.makedirs(save_path_dir, exist_ok=False)
+        else:
+            raise FileExistsError
+
+        model_path = os.path.join(save_path_dir, f"transformer" + ".pth")
+        torch.save(transformer.state_dict(), model_path)
+
+        if discriminator is not None:
+            model_path = os.path.join(self.output_dir, "discriminator" + ".pth")
+            torch.save(discriminator.state_dict(), model_path)
 
 
 
