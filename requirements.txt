@@ -1,7 +1,7 @@
 --index-url https://download.pytorch.org/whl/cu117
-tqdm
+torch==2.0.0+cu117
+torchvision==0.15.1+cu117
 Pillow>=9.0.0
-torch==2.0.0+cu117 --no-cache-dir
-torchvision==0.15.1+cu117 --no-cache-dir
 numpy>=1.17.5
+tqdm
 typing-extensions>=4.4.0
