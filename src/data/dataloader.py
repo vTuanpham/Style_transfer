@@ -8,23 +8,24 @@ from torch.utils.data import DataLoader, Dataset, RandomSampler
 
 
 class STDataset(Dataset):
-    def __init__(self, content_urls, style_urls, transform=None):
+    def __init__(self, content_urls: str, style_urls: str, transform=None):
         self.content_urls = content_urls
         self.style_urls = style_urls
         self.transform = transform
 
     def __len__(self):
-        return len(self.content_urls)
+        return len(self.content_urls) if len(self.content_urls) < len(self.style_urls) else len(self.style_urls)
 
     def __getitem__(self, idx):
         content_url = self.content_urls[idx]
-        # Randomly choose style for the image
-        style_url = random.choice(self.style_urls)
-        # style_url = r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\888440.jpg'
-        # style_url = self.style_urls[idx]
+        style_url = self.style_urls[idx]
 
-        content_image = Image.open(content_url).convert('RGB')
-        style_image = Image.open(style_url).convert('RGB')
+        try:
+            content_image = Image.open(content_url).convert('RGB')
+            style_image = Image.open(style_url).convert('RGB')
+        except IOError:
+            warnings.warn("IO Error, watch out !")
+            return {'content_image': 0,"style_image": 0}
 
         if self.transform is not None:
             content_image = self.transform(content_image)

@@ -31,7 +31,6 @@ class Trainer:
     def __init__(self,
                  dataloaders,
                  output_dir: str,
-                 lr_scheduler_type: str,
                  resume_from_checkpoint,
                  seed: int,
                  num_train_epochs: int,
@@ -47,10 +46,9 @@ class Trainer:
                  vgg_model_type: str = '19',
                  with_tracking: bool = False,
                  delta: float = 2,
-                 content_layers_idx: List[int] = [25, 30, 34],
-                 style_layers_idx: List[int] = [14, 19, 25, 28, 34],
-                 num_res_block: int = 20,
-                 num_deep_res_block: int = 2
+                 transformer_size: int = 32,
+                 content_layers_idx: List[int] = [26, 31, 35],
+                 style_layers_idx: List[int] = [13, 20, 26, 29, 35]
                  ):
 
         self.output_dir = output_dir
@@ -65,11 +63,10 @@ class Trainer:
         self.login_key = login_key if with_tracking else None
         self.vgg_model_type = vgg_model_type
         self.learning_rate = learning_rate
-        self.num_res_block = num_res_block
-        self.num_deep_res_block = num_deep_res_block
         self.content_layers_idx = content_layers_idx
         self.style_layers_idx = style_layers_idx
         self.num_train_epochs = num_train_epochs
+        self.transformer_size = transformer_size
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -93,8 +90,6 @@ class Trainer:
                     "epochs": self.num_train_epochs,
                     "content_layers_idx": self.content_layers_idx,
                     "style_layers_idx": self.style_layers_idx,
-                    "num_deep_res_block": self.num_deep_res_block,
-                    "num_res_block": self.num_res_block,
                     "device": self.device,
                     "batch_size": self.per_device_batch_size
                     }
@@ -125,7 +120,7 @@ class Trainer:
         encoder = Encoder().eval().to(self.device)
         decoder = Decoder().eval().to(self.device)
 
-        transformer = MTranspose(matrix_size=32).to(self.device)
+        transformer = MTranspose(matrix_size=self.transformer_size).to(self.device)
 
         content_extractors = self.get_feature_extractor(self.content_layers_idx, device=self.device)
         style_extractors = self.get_feature_extractor(self.style_layers_idx, device=self.device)
@@ -136,14 +131,14 @@ class Trainer:
         # Compute content loss
         losses = []
         for feature in content_features:
-            loss = self.content_loss(feature['orginal'], feature['model_output'])
+            loss = self.content_loss(feature['model_output'], feature['orginal'])
             losses.append(loss)
         loss_content = sum(losses)
 
         # Compute style loss
         losses = []
         for feature in style_features:
-            loss = self.style_loss(feature['orginal'], feature['model_output'])
+            loss = self.style_loss(feature['model_output'], feature['orginal'])
             losses.append(loss)
         loss_style = sum(losses)
 

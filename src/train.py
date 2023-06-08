@@ -19,8 +19,11 @@ def parse_args(args):
     parser.add_argument('--max_style_train_samples', type=int, default=None, help="Number of style training samples")
     parser.add_argument('--max_eval_samples', type=int, default=None, help="Number of validation samples")
     parser.add_argument('--seed', type=int, default=42, help="A seed for reproducible training.")
-    parser.add_argument('--width', type=int, default=128, help="Width of the image")
-    parser.add_argument('--height', type=int, default=128, help="Height of the image")
+    parser.add_argument('--width', type=int, default=300, help="Width of the image")
+    parser.add_argument('--height', type=int, default=300, help="Height of the image")
+    parser.add_argument('--crop_width', type=int, default=256, help="Width of the image randomly center crop")
+    parser.add_argument('--crop_height', type=int, default=256, help="Width of the image randomly center crop")
+
 
     # Training
     parser.add_argument('--num_train_epochs', type=int, default=10,
@@ -31,6 +34,8 @@ def parse_args(args):
                         help="If the training should continue from a checkpoint folder. (can be bool or string)")
     parser.add_argument('--do_eval_per_epoch', action='store_true',
                         help="Whether to run evaluate per epoch.")
+    parser.add_argument('--transformer_size', type=int, default=32,
+                        help="Size of the transformation matrix")
 
     # Optimizer
     parser.add_argument('--vgg_model_type', type=str, default='19',help=(
@@ -48,8 +53,6 @@ def parse_args(args):
                         help="Weight decay to use.")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
-    parser.add_argument('--lr_scheduler_type', type=str, default='linear', help="The scheduler type to use.",
-        choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],)
 
     args = parser.parse_args(args)
 
@@ -75,7 +78,7 @@ def main(args):
             transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.5),
             transforms.ColorJitter(brightness=0.35, contrast=0.4, saturation=0.37, hue=0.42),
             transforms.RandomHorizontalFlip(p=0.5),
-            # transforms.CenterCrop()
+            transforms.CenterCrop((args.crop_width, args.crop_height))
         ]),
         "max_style_train_samples": args.max_style_train_samples,
         "max_content_train_samples": args.max_content_train_samples,
@@ -87,7 +90,6 @@ def main(args):
     trainer_args = {
         "dataloaders": dataloaders,
         "output_dir": args.output_dir,
-        "lr_scheduler_type": args.lr_scheduler_type,
         "resume_from_checkpoint": args.resume_from_checkpoint,
         "with_tracking": args.with_tracking,
         "num_train_epochs": args.num_train_epochs,
@@ -97,6 +99,7 @@ def main(args):
         "do_eval_per_epoch": args.do_eval_per_epoch,
         "learning_rate": args.learning_rate,
         "vgg_model_type": args.vgg_model_type,
+        "transformer_size": args.transformer_size,
         "login_key": None,
         "seed": args.seed,
         "alpha": args.alpha,
