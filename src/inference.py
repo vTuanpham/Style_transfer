@@ -5,23 +5,27 @@ import torch
 import argparse
 from random import random
 from PIL import Image
-from models.generator import Generator
+import matplotlib.pyplot as plt
+import numpy as np
+from src.models.generator import Encoder, Decoder
+from src.models.transformer import MTranspose
+from src.utils.image_plot import plot_image
 import torchvision.transforms as transforms
 
 
-# def parse_args(args):
-#     parser = argparse.ArgumentParser()
-#
-#     parser.add_argument('--path_to_save_cpkt', type=str, help="Path to the save directory json file")
-#     parser.add_argument('--test_files', nargs='+', help="Path to the test sample json file")
-#     parser.add_argument('--interactive', action="store_true", help="Whether to enable interactive mode")
-#     parser.add_argument('--test_batch_size', type=int, default=6, help="Batch size of test dataloader")
-#     parser.add_argument('--max_test_samples', type=int, default=None, help="Sample size of the test dataset")
-#     parser.add_argument('--seed', type=int, default=42, help="Seed for dataloader shuffle")
-#
-#     args = parser.parse_args(args)
-#
-#     return args
+def parse_args(args):
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--path_to_save_cpkt', type=str, help="Path to the save directory json file")
+    parser.add_argument('--test_files', nargs='+', help="Path to the test sample json file")
+    parser.add_argument('--interactive', action="store_true", help="Whether to enable interactive mode")
+    parser.add_argument('--test_batch_size', type=int, default=6, help="Batch size of test dataloader")
+    parser.add_argument('--max_test_samples', type=int, default=None, help="Sample size of the test dataset")
+    parser.add_argument('--seed', type=int, default=42, help="Seed for dataloader shuffle")
+
+    args = parser.parse_args(args)
+
+    return args
 #
 #
 # def main(args):
@@ -78,30 +82,65 @@ import torchvision.transforms as transforms
 
 
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = 'cpu'
+encoder = Encoder().eval().to(device)
+decoder = Decoder().eval().to(device)
 
-style_img_generator = Generator(num_res_block=20, num_deep_res_block=2).to(device)
-checkpoint = torch.load(r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\models\checkpoints\TotalL_4.384126663208008_Content_1.4945733547210693_Style_6.834507942199707\generator.pth")
+transformer = MTranspose(matrix_size=32).to(device)
 
-style_img_generator.load_state_dict(checkpoint)
-content_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im20.jpg').convert('RGB')
-style_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\972994.jpg').convert('RGB')
+checkpoint = torch.load(r"./src/models/checkpoints/TotalL_583.1285400390625_Content_5.456900596618652_Style_411.40655517578125/transformer.pth")
+transformer.load_state_dict(checkpoint)
+
+content_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im40.jpg').convert('RGB')
+style_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\888440.jpg').convert('RGB')
 trans = transforms.Compose([
-            transforms.Resize((64, 64)),
+            # transforms.Resize((64, 64)),
             transforms.ToTensor()
         ])
-style_img_generator.eval()
+content_tensor = trans(content_image).to(device)
+style_tensor = trans(style_image).to(device)
+transformer.eval()
+encode_Cfeatures = encoder(content_tensor.unsqueeze(0))
+encode_Sfeatures = encoder(style_tensor.unsqueeze(0))
+transformed_features = transformer(encode_Cfeatures, encode_Sfeatures)
+decode_img = decoder(transformed_features)
 
-content_tensor = trans(content_image)
-style_tensor = trans(style_image)
+# Convert tensor images to numpy arrays and adjust their shape if needed
+image1_np = content_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()  # Adjust dimensions as per your tensor shape
+image2_np = decode_img.squeeze().permute(1, 2, 0).detach().cpu().numpy() # Adjust dimensions as per your tensor shape
+image3_np = style_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()
 
-stacked_images = torch.cat((content_tensor, style_tensor), dim=0).to(device)
+# Create a figure with subplots
+fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(10, 4))
 
-# Generate the final stylized image
-final_output = style_img_generator(stacked_images.unsqueeze(0))
+# Plot each image on a separate subplot
+axes[0].imshow(image1_np)
+axes[0].set_title('Content')
+axes[0].axis('off')
 
+axes[1].imshow(image2_np)
+axes[1].set_title('Style')
+axes[1].axis('off')
+
+axes[2].imshow(image3_np)
+axes[2].set_title('Stylized content')
+axes[2].axis('off')
+
+# Adjust the spacing between subplots
+plt.tight_layout()
+
+# Save the figure
+plt.savefig('image_plot.png')  # Specify the desired file name and extension
+
+# Show the figure (optional)
+plt.show()
+
+# plot_image(content_tensor.detach().cpu())
+# plot_image(decode_img.detach().cpu())
+# plot_image(style_tensor.unsqueeze(0).detach().cpu())
 # Convert the tensor back to an image
-final_image = transforms.ToPILImage()(final_output.squeeze(0).detach().cpu())
+final_image = transforms.ToPILImage()(decode_img.squeeze(0).detach().cpu())
 
 # Save the final stylized image
 final_image.save("stylized_image1.jpg")
