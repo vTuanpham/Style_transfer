@@ -47,8 +47,8 @@ class Trainer:
                  with_tracking: bool = False,
                  delta: float = 2,
                  transformer_size: int = 32,
-                 content_layers_idx: List[int] = [26, 31, 35],
-                 style_layers_idx: List[int] = [13, 20, 26, 29, 35]
+                 content_layers_idx: List[int] = [8, 11, 13],
+                 style_layers_idx: List[int] = [1, 3, 6, 8]
                  ):
 
         self.output_dir = output_dir
@@ -140,7 +140,8 @@ class Trainer:
         for feature in style_features:
             loss = self.style_loss(feature['model_output'], feature['orginal'])
             losses.append(loss)
-        loss_style = sum(losses)
+        loss_style_weightAdjust = map(lambda loss: loss*(1/(len(losses))), losses)
+        loss_style = sum(loss_style_weightAdjust)
 
         # Compute variation loss
         variation_loss = self.variation_loss(stylized_outputs)
@@ -169,8 +170,8 @@ class Trainer:
 
         # Training loop
         loss_list = []
-        for epoch in tqdm.tqdm(range(self.num_train_epochs), colour='green', position=0):
-            for step, batch in enumerate(tqdm.tqdm(self.dataloaders, colour='blue', position=1)):
+        for epoch in tqdm.tqdm(range(self.num_train_epochs), colour='green', position=0, leave=True):
+            for step, batch in enumerate(tqdm.tqdm(self.dataloaders, colour='blue', position=1, leave=True)):
                 content_imgs = batch['content_image'].to(self.device)
                 style_imgs = batch['style_image'].to(self.device)
 
@@ -203,7 +204,7 @@ class Trainer:
                                                                                          decode_imgs,
                                                                                          style_imgs)
 
-                del content_features, style_features, encode_Cfeatures, encode_Sfeatures
+                del content_features, style_features, encode_Cfeatures, encode_Sfeatures, transformed_features
 
                 # Backpropagation and optimization
                 transformer_optimizer.zero_grad()
