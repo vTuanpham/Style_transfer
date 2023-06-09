@@ -8,8 +8,14 @@ python src/train.py --output_dir "./src/models/checkpoints"           \
                    --seed 42                                     \
                    --num_train_epochs 10                         \
                    --learning_rate 5e-5                          \
-                   --alpha 0.01                                  \
-                   --beta 0.01                                   \
-                   --gamma 0.01                                  \
-                   --width 32                                    \
-                   --height 32
+                   --alpha 1                                     \
+                   --beta 1                                      \
+                   --gamma 1                                     \
+                   --delta 1                                     \
+                   --width 64                                    \
+                   --height 64                                   \
+                   --crop_width 32                               \
+                   --crop_height 32                              \
+                   --content_layers_idx 8 11 13                  \
+                   --style_layers_idx 1 3 6 8                    \
+                   --transformer_size 16

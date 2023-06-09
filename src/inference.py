@@ -89,10 +89,10 @@ decoder = Decoder().eval().to(device)
 
 transformer = MTranspose(matrix_size=32).to(device)
 
-checkpoint = torch.load(r"./src/models/checkpoints/TotalL_583.1285400390625_Content_5.456900596618652_Style_411.40655517578125/transformer.pth")
+checkpoint = torch.load(r"./src/models/checkpoints/TotalL_7.295699119567871_Content_5.415552139282227_Style_0.566848635673523/transformer.pth")
 transformer.load_state_dict(checkpoint)
 
-content_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im40.jpg').convert('RGB')
+content_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im158.jpg').convert('RGB')
 style_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\888440.jpg').convert('RGB')
 trans = transforms.Compose([
             # transforms.Resize((64, 64)),
@@ -108,8 +108,8 @@ decode_img = decoder(transformed_features)
 
 # Convert tensor images to numpy arrays and adjust their shape if needed
 image1_np = content_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()  # Adjust dimensions as per your tensor shape
-image2_np = decode_img.squeeze().permute(1, 2, 0).detach().cpu().numpy() # Adjust dimensions as per your tensor shape
-image3_np = style_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()
+image2_np = style_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()
+image3_np = decode_img.squeeze().permute(1, 2, 0).detach().cpu().numpy() # Adjust dimensions as per your tensor shape
 
 # Create a figure with subplots
 fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(10, 4))
