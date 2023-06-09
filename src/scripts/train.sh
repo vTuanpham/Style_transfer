@@ -1,6 +1,6 @@
-python src/train.py --output_dir "/models/checkpoints"           \
-                   --content_datapath ".src/data/dummy/content"  \
-                   --style_datapath ".src/data/dummy/style"      \
+python src/train.py --output_dir "./src/models/checkpoints/training_session"           \
+                   --content_datapath "./src/data/dummy/content"  \
+                   --style_datapath "./src/data/dummy/style"      \
                    --batch_size 5                                \
                    --max_style_train_samples 20                  \
                    --max_content_train_samples 1000              \

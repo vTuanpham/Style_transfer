@@ -11,10 +11,10 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 from torchvision.models._utils import IntermediateLayerGetter
 
-import tqdm
 import wandb
 from PIL import Image
 from typing import List
+from tqdm.auto import tqdm
 
 from src.models.losses import StyleLoss, TVLoss, HistLoss
 from torch.nn import MSELoss as ContentLoss
@@ -170,8 +170,10 @@ class Trainer:
 
         # Training loop
         loss_list = []
-        for epoch in tqdm.tqdm(range(self.num_train_epochs), colour='green', position=0, leave=True):
-            for step, batch in enumerate(tqdm.tqdm(self.dataloaders, colour='blue', position=1, leave=True)):
+        for epoch in tqdm(range(self.num_train_epochs), desc="Training progress",
+                          colour='green', position=0, leave=True, file=sys.stdout):
+            for step, batch in enumerate(tqdm(self.dataloaders, colour='blue', desc="Training batch progress",
+                                              position=1, leave=True, file=sys.stdout)):
                 content_imgs = batch['content_image'].to(self.device)
                 style_imgs = batch['style_image'].to(self.device)
 
@@ -262,6 +264,7 @@ class Trainer:
         if discriminator is not None:
             model_path = os.path.join(self.output_dir, "discriminator" + ".pth")
             torch.save(discriminator.state_dict(), model_path)
+
 
 
 

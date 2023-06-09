@@ -1,4 +1,4 @@
-python src/train.py --output_dir "./src/models/checkpoints"           \
+python src/train.py --output_dir "./src/models/checkpoints/training_session"           \
                    --content_datapath "./src/data/dummy/content"  \
                    --style_datapath "./src/data/dummy/style"      \
                    --batch_size 1                                \
