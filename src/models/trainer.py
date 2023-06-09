@@ -166,6 +166,16 @@ class Trainer:
         # Define the learning rate scheduler
         scheduler = lr_scheduler.LambdaLR(transformer_optimizer, lr_lambda=lambda epoch: 0.1 ** (epoch / 10))
 
+        print(f"\n --- Training init log --- \n")
+        print(f"   Number of epoch: {self.num_train_epochs}"
+              f"\n Batch size: {self.per_device_batch_size}"
+              f"\n Total number of batch: {len(self.dataloaders)}"
+              f"\n Total number of examples: {len(self.dataloaders.dataset)}"
+              f"\n Transformation matrix size: {self.transformer_size}"
+              f"\n Content layers loss idx: {self.content_layers_idx}"
+              f"\n Style layers loss idx: {self.style_layers_idx}"
+              f"\n Device to train: {self.device}\n")
+
         transformer.train()
 
         # Training loop
@@ -173,7 +183,7 @@ class Trainer:
         for epoch in tqdm(range(self.num_train_epochs), desc="Training progress",
                           colour='green', position=0, leave=True, file=sys.stdout):
             for step, batch in enumerate(tqdm(self.dataloaders, colour='blue', desc="Training batch progress",
-                                              position=1, leave=True, file=sys.stdout)):
+                                              position=1, leave=False, file=sys.stdout)):
                 content_imgs = batch['content_image'].to(self.device)
                 style_imgs = batch['style_image'].to(self.device)
 
