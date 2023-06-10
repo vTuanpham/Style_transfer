@@ -340,7 +340,7 @@ class Trainer:
         # Adjust the spacing between subplots
         plt.tight_layout()
 
-        Show the figure (optional)
+        # Show the figure (optional)
         plt.show(block=False)
         plt.pause(sleep)
 
