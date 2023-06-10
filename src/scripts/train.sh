@@ -16,8 +16,8 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --height 128                                  \
                    --crop_width 256                              \
                    --crop_height 256                             \
-                   --content_layers_idx 8 11 13                  \
-                   --style_layers_idx 1 3 6 8                    \
+                   --content_layers_idx 11 17 22 26              \
+                   --style_layers_idx 1 3 6 8 11                 \
                    --transformer_size 32
 
 
