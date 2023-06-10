@@ -50,6 +50,8 @@ class Trainer:
                  with_tracking: bool = False,
                  delta: float = 2,
                  transformer_size: int = 32,
+                 layer_depth: int = 1,
+                 deep_learner: bool = False,
                  content_layers_idx: List[int] = [11, 17, 22, 26],
                  style_layers_idx: List[int] = [1, 3, 6, 8, 9, 11]
                  ):
@@ -70,6 +72,8 @@ class Trainer:
         self.style_layers_idx = style_layers_idx
         self.num_train_epochs = num_train_epochs
         self.transformer_size = transformer_size
+        self.layer_depth = layer_depth
+        self.deep_learner = deep_learner
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -123,7 +127,8 @@ class Trainer:
         encoder = Encoder().eval().to(self.device)
         decoder = Decoder().eval().to(self.device)
 
-        transformer = MTranspose(matrix_size=self.transformer_size).to(self.device)
+        transformer = MTranspose(matrix_size=self.transformer_size,
+                                 layer_depth=self.layer_depth, deep_learner=self.deep_learner).to(self.device)
 
         content_extractors = self.get_feature_extractor(self.content_layers_idx, device=self.device)
         style_extractors = self.get_feature_extractor(self.style_layers_idx, device=self.device)
@@ -178,6 +183,8 @@ class Trainer:
               f"\n Transformation matrix size: {self.transformer_size}"
               f"\n Content layers loss idx: {self.content_layers_idx}"
               f"\n Style layers loss idx: {self.style_layers_idx}"
+              f"\n Depth of CNN layer: {self.layer_depth}"
+              f"\n Deep learner: {self.deep_learner}"
               f"\n Device to train: {self.device}\n")
 
         # Training loop

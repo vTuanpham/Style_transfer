@@ -36,6 +36,10 @@ def parse_args(args):
                         help="Whether to run evaluate per epoch.")
     parser.add_argument('--transformer_size', type=int, default=32,
                         help="Size of the transformation matrix")
+    parser.add_argument('--CNN_layer_depth', type=int, default=1,
+                        help="Depth of CNN layer")
+    parser.add_argument('--deep_learner', action='store_true',
+                        help="Whether to enable deepest layer for abstract learning.")
 
     # Optimizer
     parser.add_argument('--vgg_model_type', type=str, default='19',help=(
@@ -106,6 +110,8 @@ def main(args):
         "learning_rate": args.learning_rate,
         "vgg_model_type": args.vgg_model_type,
         "transformer_size": args.transformer_size,
+        "layer_depth": args.CNN_layer_depth,
+        "deep_learner": args.deep_learner,
         "login_key": None,
         "seed": args.seed,
         "alpha": args.alpha,

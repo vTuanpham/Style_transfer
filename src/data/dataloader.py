@@ -2,7 +2,8 @@ import os
 import random
 import warnings
 import torch
-from PIL import Image
+from PIL import Image, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Dataset, RandomSampler
 
@@ -25,7 +26,7 @@ class STDataset(Dataset):
             style_image = Image.open(style_url).convert('RGB')
         except IOError:
             warnings.warn("IO Error, watch out !")
-            return {'content_image': 0,"style_image": 0}
+            raise "IO Error!"
 
         if self.transform is not None:
             content_image = self.transform(content_image)
