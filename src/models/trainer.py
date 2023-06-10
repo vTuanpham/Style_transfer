@@ -266,9 +266,11 @@ class Trainer:
 
             if float(total_loss.item()) == min(loss_list):
                 print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
-                self.save(transformer, loss_info={"total": float(total_loss.item()),
-                                                    "content": loss_content,
-                                                    "style": loss_style}, result=plot)
+                self.save(transformer, transformer_optimizer, info={"total": total_loss,
+                                                                    "content": loss_content,
+                                                                    "style": loss_style,
+                                                                    "epoch": epoch
+                                                                    }, result=plot)
             else:
                 print(f"Discarding epoch [{epoch + 1}/{self.num_train_epochs}]")
                 plot.close('all')
@@ -277,8 +279,8 @@ class Trainer:
         if self.with_tracking:
             self.wandb.finish()
 
-    def save(self, transformer, discriminator=None, loss_info=None, result=None):
-        dir_name = f"TotalL_{loss_info['total']}_Content_{loss_info['content']}_Style_{loss_info['style']}"
+    def save(self, transformer, transformer_optimizer, discriminator=None, info=None, result=None):
+        dir_name = f"TotalL_{float(info['total'].item())}_Content_{info['content']}_Style_{info['style']}"
         save_path_dir = os.path.join(self.output_dir, dir_name)
         print(f" Saving in {save_path_dir}")
         if not os.path.exists(save_path_dir):
@@ -288,7 +290,12 @@ class Trainer:
 
         model_path = os.path.join(save_path_dir, f"transformer{len(self.dataloaders.dataset)}" + ".pth")
         plot_path = os.path.join(save_path_dir, "result_plot.png")
-        torch.save(transformer.state_dict(), model_path)
+        torch.save({
+            'epoch': info['epoch'],
+            'model_state_dict': transformer.state_dict(),
+            'optimizer_state_dict': transformer_optimizer.state_dict(),
+            'loss': info['total']
+        }, model_path)
         result.savefig(plot_path)
 
         if discriminator is not None:
