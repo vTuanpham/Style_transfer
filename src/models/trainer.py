@@ -1,6 +1,7 @@
 import random
 import sys
 import os
+import time
 sys.path.insert(0,r'./') #Add root directory here
 
 import torch
@@ -11,10 +12,12 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 from torchvision.models._utils import IntermediateLayerGetter
 
-import tqdm
 import wandb
+import numpy as np
 from PIL import Image
 from typing import List
+from tqdm.auto import tqdm
+import matplotlib.pyplot as plt
 
 from src.models.losses import StyleLoss, TVLoss, HistLoss
 from torch.nn import MSELoss as ContentLoss
@@ -47,8 +50,8 @@ class Trainer:
                  with_tracking: bool = False,
                  delta: float = 2,
                  transformer_size: int = 32,
-                 content_layers_idx: List[int] = [26, 31, 35],
-                 style_layers_idx: List[int] = [13, 20, 26, 29, 35]
+                 content_layers_idx: List[int] = [11, 17, 22, 26],
+                 style_layers_idx: List[int] = [1, 3, 6, 8, 9, 11]
                  ):
 
         self.output_dir = output_dir
@@ -133,14 +136,16 @@ class Trainer:
         for feature in content_features:
             loss = self.content_loss(feature['model_output'], feature['orginal'])
             losses.append(loss)
-        loss_content = sum(losses)
+        loss_content_weightAdjust = map(lambda loss: loss*(1/(len(losses))), losses)
+        loss_content = sum(loss_content_weightAdjust)
 
         # Compute style loss
         losses = []
         for feature in style_features:
             loss = self.style_loss(feature['model_output'], feature['orginal'])
             losses.append(loss)
-        loss_style = sum(losses)
+        loss_style_weightAdjust = map(lambda loss: loss*(1/(len(losses))), losses)
+        loss_style = sum(loss_style_weightAdjust)
 
         # Compute variation loss
         variation_loss = self.variation_loss(stylized_outputs)
@@ -165,12 +170,23 @@ class Trainer:
         # Define the learning rate scheduler
         scheduler = lr_scheduler.LambdaLR(transformer_optimizer, lr_lambda=lambda epoch: 0.1 ** (epoch / 10))
 
-        transformer.train()
+        print(f"\n --- Training init log --- \n")
+        print(f"   Number of epoch: {self.num_train_epochs}"
+              f"\n Batch size: {self.per_device_batch_size}"
+              f"\n Total number of batch: {len(self.dataloaders)}"
+              f"\n Total number of examples: {len(self.dataloaders.dataset)}"
+              f"\n Transformation matrix size: {self.transformer_size}"
+              f"\n Content layers loss idx: {self.content_layers_idx}"
+              f"\n Style layers loss idx: {self.style_layers_idx}"
+              f"\n Device to train: {self.device}\n")
 
         # Training loop
         loss_list = []
-        for epoch in tqdm.tqdm(range(self.num_train_epochs), colour='green', position=0):
-            for step, batch in enumerate(tqdm.tqdm(self.dataloaders, colour='blue', position=1)):
+        for epoch in tqdm(range(self.num_train_epochs), desc="Training progress",
+                          colour='green', position=0, leave=True, file=sys.stdout):
+            transformer.train()
+            for step, batch in enumerate(tqdm(self.dataloaders, colour='blue', desc="Training batch progress",
+                                              position=1, leave=False, file=sys.stdout)):
                 content_imgs = batch['content_image'].to(self.device)
                 style_imgs = batch['style_image'].to(self.device)
 
@@ -203,13 +219,12 @@ class Trainer:
                                                                                          decode_imgs,
                                                                                          style_imgs)
 
-                del content_features, style_features, encode_Cfeatures, encode_Sfeatures
+                del content_features, style_features, encode_Cfeatures, encode_Sfeatures, transformed_features
 
                 # Backpropagation and optimization
                 transformer_optimizer.zero_grad()
                 total_loss.backward()
                 transformer_optimizer.step()
-
 
             # Update learning rate
             scheduler.step()
@@ -234,19 +249,28 @@ class Trainer:
                                 "Total_loss": float(total_loss.item()),
                                 "Min_loss": min(loss_list)}, step=epoch)
 
+            print(f"\n Plotting comparison of epoch [{epoch + 1}/{self.num_train_epochs}]... \n")
+            plot = self.plot_comparison(encoder, decoder, transformer,
+                                         r"./src/data/dummy/content/im3.jpg", r"./src/data/dummy/style/888440.jpg",
+                                         transforms.Compose([
+                                             transforms.Resize(256),
+                                             transforms.ToTensor()
+                                         ]), self.device)
+
             if float(total_loss.item()) == min(loss_list):
                 print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
                 self.save(transformer, loss_info={"total": float(total_loss.item()),
                                                     "content": loss_content,
-                                                    "style": loss_style})
+                                                    "style": loss_style}, result=plot)
             else:
                 print(f"Discarding epoch [{epoch + 1}/{self.num_train_epochs}]")
+                plot.close('all')
                 continue
 
         if self.with_tracking:
             self.wandb.finish()
 
-    def save(self, transformer, discriminator=None, loss_info=None):
+    def save(self, transformer, discriminator=None, loss_info=None, result=None):
         dir_name = f"TotalL_{loss_info['total']}_Content_{loss_info['content']}_Style_{loss_info['style']}"
         save_path_dir = os.path.join(self.output_dir, dir_name)
         print(f" Saving in {save_path_dir}")
@@ -255,12 +279,63 @@ class Trainer:
         else:
             raise FileExistsError
 
-        model_path = os.path.join(save_path_dir, f"transformer" + ".pth")
+        model_path = os.path.join(save_path_dir, f"transformer{len(self.dataloaders.dataset)}" + ".pth")
+        plot_path = os.path.join(save_path_dir, "result_plot.png")
         torch.save(transformer.state_dict(), model_path)
+        result.savefig(plot_path)
 
         if discriminator is not None:
             model_path = os.path.join(self.output_dir, "discriminator" + ".pth")
             torch.save(discriminator.state_dict(), model_path)
 
+    @staticmethod
+    def plot_comparison(encoder, decoder, transformer, content_img_url,
+                        style_img_url, transformation, device, sleep: int = 5):
+        try:
+            content_image = Image.open(content_img_url).convert('RGB')
+            style_image = Image.open(style_img_url).convert('RGB')
+        except IOError:
+            raise "Invalid image url!"
 
+        content_image_tensor = transformation(content_image).to(device)
+        style_image_tensor = transformation(style_image).to(device)
+
+        transformer.eval()
+
+        encode_Cfeatures = encoder(content_image_tensor.unsqueeze(0))
+        encode_Sfeatures = encoder(style_image_tensor.unsqueeze(0))
+
+        transformed_features = transformer(encode_Cfeatures, encode_Sfeatures)
+
+        decode_img = decoder(transformed_features)
+
+        # Convert tensor images to numpy arrays and adjust their shape if needed
+        image1_np = content_image_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()  # Adjust dimensions as per your tensor shape
+        image2_np = style_image_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()
+        image3_np = decode_img.squeeze().permute(1, 2, 0).detach().cpu().numpy()  # Adjust dimensions as per your tensor shape
+
+        # Create a figure with subplots
+        fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(10, 4))
+
+        # Plot each image on a separate subplot
+        axes[0].imshow(image1_np)
+        axes[0].set_title('Content')
+        axes[0].axis('off')
+
+        axes[1].imshow(image2_np)
+        axes[1].set_title('Style')
+        axes[1].axis('off')
+
+        axes[2].imshow(image3_np)
+        axes[2].set_title('Stylized content')
+        axes[2].axis('off')
+
+        # Adjust the spacing between subplots
+        plt.tight_layout()
+
+        # Show the figure (optional)
+        plt.show(block=False)
+        plt.pause(sleep)
+
+        return plt
 

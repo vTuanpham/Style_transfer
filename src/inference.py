@@ -89,11 +89,11 @@ decoder = Decoder().eval().to(device)
 
 transformer = MTranspose(matrix_size=32).to(device)
 
-checkpoint = torch.load(r"./src/models/checkpoints/TotalL_622.3424072265625_Content_3.362321376800537_Style_440.93450927734375/transformer.pth")
+checkpoint = torch.load(r"./src/models/checkpoints/TotalL_7.295699119567871_Content_5.415552139282227_Style_0.566848635673523/transformer.pth")
 transformer.load_state_dict(checkpoint)
 
-content_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im113.jpg').convert('RGB')
-style_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\Art_by_number\train_9\92112.jpg').convert('RGB')
+content_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im158.jpg').convert('RGB')
+style_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\888440.jpg').convert('RGB')
 trans = transforms.Compose([
             # transforms.Resize((64, 64)),
             transforms.ToTensor()

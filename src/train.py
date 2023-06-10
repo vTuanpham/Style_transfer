@@ -49,10 +49,16 @@ def parse_args(args):
                         help="Initial beta to use.")
     parser.add_argument('--gamma', type=float, default=5e-5,
                         help="Initial gamma to use.")
+    parser.add_argument('--delta', type=float, default=5e-5,
+                        help="Initial delta to use.")
     parser.add_argument('--weight_decay', type=float, default=0.3,
                         help="Weight decay to use.")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
+    parser.add_argument('--content_layers_idx', nargs='+', type=int, default=[8, 11, 13],
+                        help="Vgg layers to compute content loss")
+    parser.add_argument('--style_layers_idx', nargs='+', type=int, default=[1, 3, 6, 8],
+                        help="Vgg layers to compute style loss")
 
     args = parser.parse_args(args)
 
@@ -104,7 +110,10 @@ def main(args):
         "seed": args.seed,
         "alpha": args.alpha,
         "beta": args.beta,
-        "gamma": args.gamma
+        "gamma": args.gamma,
+        "delta": args.delta,
+        "content_layers_idx": args.content_layers_idx,
+        "style_layers_idx": args.style_layers_idx
     }
     trainer = Trainer(**trainer_args)
     trainer.train()

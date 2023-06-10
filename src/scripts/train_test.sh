@@ -1,4 +1,4 @@
-python src/train.py --output_dir "./src/models/checkpoints"           \
+python src/train.py --output_dir "./src/models/checkpoints/training_session"           \
                    --content_datapath "./src/data/dummy/content"  \
                    --style_datapath "./src/data/dummy/style"      \
                    --batch_size 1                                \
@@ -8,8 +8,14 @@ python src/train.py --output_dir "./src/models/checkpoints"           \
                    --seed 42                                     \
                    --num_train_epochs 10                         \
                    --learning_rate 5e-5                          \
-                   --alpha 0.01                                  \
-                   --beta 0.01                                   \
-                   --gamma 0.01                                  \
-                   --width 32                                    \
-                   --height 32
+                   --alpha 1                                     \
+                   --beta 1                                      \
+                   --gamma 1                                     \
+                   --delta 1                                     \
+                   --width 64                                    \
+                   --height 64                                   \
+                   --crop_width 32                               \
+                   --crop_height 32                              \
+                   --content_layers_idx 11 17 22 26              \
+                   --style_layers_idx 1 3 6 8 9 11               \
+                   --transformer_size 16
