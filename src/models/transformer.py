@@ -34,9 +34,34 @@ class SymmetricPadding2D(nn.Module):
 
 
 class FFExtractor(nn.Module):
-    def __init__(self, matrix_size=32):
+    def __init__(self, matrix_size=32, layer_depth=1, deep_learner=False):
         super(FFExtractor, self).__init__()
-        self.cnn = nn.Sequential(SymmetricPadding2D((1,1,1,1)),
+        self.layer_depth = layer_depth
+        self.deep_learner = deep_learner
+        self.cnn_block_super_deep_transition = nn.Sequential(
+                                                SymmetricPadding2D((1, 1, 1, 1)),
+                                                nn.Conv2d(in_channels=256,
+                                                          out_channels=512,
+                                                          kernel_size=(3, 3),
+                                                          stride=1, padding=0),
+                                                nn.ReLU(inplace=True),
+                                                SymmetricPadding2D((1, 1, 1, 1)),
+                                                nn.Conv2d(in_channels=512,
+                                                          out_channels=256,
+                                                          kernel_size=(3, 3),
+                                                          stride=1, padding=0),
+                                                nn.ReLU(inplace=True),
+                                            )
+        self.cnn_block_deep = nn.Sequential(
+                                SymmetricPadding2D((1, 1, 1, 1)),
+                                nn.Conv2d(in_channels=256,
+                                          out_channels=256,
+                                          kernel_size=(3, 3),
+                                          stride=1, padding=0),
+                                nn.ReLU(inplace=True),
+        )
+        self.cnn_final = nn.Sequential(
+                                 SymmetricPadding2D((1,1,1,1)),
                                  nn.Conv2d(in_channels=256,
                                            out_channels=128,
                                            kernel_size=(3,3),
@@ -53,11 +78,17 @@ class FFExtractor(nn.Module):
                                            out_channels=matrix_size,
                                            kernel_size=(3,3),
                                            stride=1 ,padding=0)
-                                )
+        )
+
         self.dense = nn.Linear(in_features=matrix_size*matrix_size, out_features=matrix_size*matrix_size)
 
     def forward(self, x):
-        out = self.cnn(x)
+        out = x
+        for layer in range(self.layer_depth):
+            out = self.cnn_block_deep(out)
+        if self.deep_learner:
+            out = self.cnn_block_super_deep_transition(out)
+        out = self.cnn_final(out)
         b, c, h, w = out.size()
         out = out.view(b, c, -1)   # batch, channels, h*w
         out = torch.bmm(out, out.transpose(1, 2)).div(h * w) # Compute covariance matrix
@@ -66,7 +97,7 @@ class FFExtractor(nn.Module):
 
 
 class MTranspose(nn.Module):
-    def __init__(self, matrix_size=32):
+    def __init__(self, matrix_size=32, layer_depth=1, deep_learner=False):
         super(MTranspose, self).__init__()
         self.matrix_size = matrix_size
         self.compress = nn.Conv2d(in_channels=256,
@@ -78,8 +109,8 @@ class MTranspose(nn.Module):
                                     kernel_size=(1,1),
                                     stride=1, padding=0)
 
-        self.style_FFE = FFExtractor(matrix_size=matrix_size)
-        self.content_FFE = FFExtractor(matrix_size=matrix_size)
+        self.style_FFE = FFExtractor(matrix_size=matrix_size, layer_depth=layer_depth, deep_learner=deep_learner)
+        self.content_FFE = FFExtractor(matrix_size=matrix_size, layer_depth=layer_depth, deep_learner=deep_learner)
 
     def forward(self, content_features, style_features):
        cbatch, cchannels, cheight, cwidth = content_features.size()
