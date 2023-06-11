@@ -231,7 +231,7 @@ class Trainer:
 
             loss_list.append(total_loss)
             last_session_epoch = checkpoint['epoch']
-            print(f"\n Loss from previous training session: {float(total_loss.item())}"
+            print(f"\n Loss from previous training session: {total_loss}"
                   f"\n Last training session epoch: {last_session_epoch+1}")
             if last_session_epoch+1 < self.num_train_epochs:
                 init_epoch = last_session_epoch+1
