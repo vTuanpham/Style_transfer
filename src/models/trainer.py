@@ -191,9 +191,6 @@ class Trainer:
         init_epoch = 0
         loss_list = []
         completed_step = 0
-        total_epoch_loss, total_epoch_content_loss = 0, 0
-        total_epoch_style_loss, total_epoch_var_loss = 0, 0
-        total_epoch_hist_loss = 0
         if self.resume_from_checkpoint is not None:
             checkpoint_dir = os.path.basename(os.path.dirname(os.path.realpath(self.resume_from_checkpoint)))
             print(f"\n --- Resume from checkpoint {checkpoint_dir}--- \n")
@@ -247,6 +244,9 @@ class Trainer:
         # Training loop
         for epoch in tqdm(range(init_epoch, self.num_train_epochs), desc="Training progress",
                           colour='green', position=0, leave=True, file=sys.stdout):
+            total_epoch_loss, total_epoch_content_loss = 0, 0
+            total_epoch_style_loss, total_epoch_var_loss = 0, 0
+            total_epoch_hist_loss = 0
             transformer.train()
             for step, batch in enumerate(tqdm(self.dataloaders, colour='blue', desc="Training batch progress",
                                               position=1, leave=False, file=sys.stdout)):
@@ -282,7 +282,8 @@ class Trainer:
                                                                                          decode_imgs,
                                                                                          style_imgs)
 
-                del content_features, style_features, encode_Cfeatures, encode_Sfeatures, transformed_features
+                del content_features, style_features, encode_Cfeatures, encode_Sfeatures
+                del org_output_features, gen_output_features, transformed_features
 
                 # Backpropagation and optimization
                 transformer_optimizer.zero_grad()
