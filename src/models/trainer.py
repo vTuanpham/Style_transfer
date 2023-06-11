@@ -34,7 +34,6 @@ class Trainer:
     def __init__(self,
                  dataloaders,
                  output_dir: str,
-                 resume_from_checkpoint,
                  seed: int,
                  num_train_epochs: int,
                  weight_decay,
@@ -46,6 +45,7 @@ class Trainer:
                  beta: float,
                  gamma: float,
                  login_key: str,
+                 resume_from_checkpoint: str = None,
                  vgg_model_type: str = '19',
                  with_tracking: bool = False,
                  delta: float = 2,
@@ -67,6 +67,7 @@ class Trainer:
         self.with_tracking = with_tracking
         self.login_key = login_key if with_tracking else None
         self.vgg_model_type = vgg_model_type
+        self.resume_from_checkpoint = resume_from_checkpoint
         self.learning_rate = learning_rate
         self.content_layers_idx = content_layers_idx
         self.style_layers_idx = style_layers_idx
@@ -175,8 +176,41 @@ class Trainer:
         # Define the learning rate scheduler
         scheduler = lr_scheduler.LambdaLR(transformer_optimizer, lr_lambda=lambda epoch: 0.1 ** (epoch / 10))
 
+        init_epoch = 0
+        loss_list = []
+        if self.resume_from_checkpoint is not None:
+            checkpoint_dir = os.path.basename(os.path.dirname(os.path.realpath(self.resume_from_checkpoint)))
+            print(f"\n --- Resume from checkpoint {checkpoint_dir}--- \n")
+            try:
+                checkpoint = torch.load(self.resume_from_checkpoint, map_location=self.device)
+            except Exception:
+                raise "Unable to load from checkpoint, invalid path!"
+
+            print(f"\n Loading transformer model... ")
+            try:
+                transformer.load_state_dict(checkpoint['model_state_dict'])
+            except Exception:
+                raise "Unable to load weight to the model, wrong model structure compare to checkpoint!"
+
+            print(f"\n Loading optimizer...")
+            try:
+                transformer_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            except Exception:
+                raise "Unable to load optimizer state!"
+
+            total_loss = checkpoint['loss']
+            loss_list.append(float(total_loss.item()))
+            last_session_epoch = checkpoint['epoch']
+            print(f"\n Loss from previous training session: {float(total_loss.item())}"
+                  f"\n Last training session epoch: {last_session_epoch+1}")
+            if last_session_epoch+1 < self.num_train_epochs:
+                init_epoch = last_session_epoch+1
+            else:
+                raise "Num train epoch can't be smaller than last session epoch resume from checkpoint!"
+
         print(f"\n --- Training init log --- \n")
-        print(f"   Number of epoch: {self.num_train_epochs}"
+        print(f"\n Number of epoch: {self.num_train_epochs}"
+              f"\n Init epoch: {init_epoch}"
               f"\n Batch size: {self.per_device_batch_size}"
               f"\n Total number of batch: {len(self.dataloaders)}"
               f"\n Total number of examples: {len(self.dataloaders.dataset)}"
@@ -188,8 +222,7 @@ class Trainer:
               f"\n Device to train: {self.device}\n")
 
         # Training loop
-        loss_list = []
-        for epoch in tqdm(range(self.num_train_epochs), desc="Training progress",
+        for epoch in tqdm(range(init_epoch, self.num_train_epochs), desc="Training progress",
                           colour='green', position=0, leave=True, file=sys.stdout):
             transformer.train()
             for step, batch in enumerate(tqdm(self.dataloaders, colour='blue', desc="Training batch progress",
@@ -352,4 +385,3 @@ class Trainer:
         plt.pause(sleep)
 
         return plt
-

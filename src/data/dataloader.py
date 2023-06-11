@@ -1,9 +1,12 @@
 import os
 import random
 import warnings
+
+import PIL.Image
 import torch
 from PIL import Image, ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+PIL.Image.MAX_IMAGE_PIXELS = 933120000
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Dataset, RandomSampler
 

@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from src.models.generator import Encoder, Decoder
 from src.models.transformer import MTranspose
+from src.models.trainer import Trainer
 from src.utils.image_plot import plot_image
 import torchvision.transforms as transforms
 
@@ -82,65 +83,21 @@ def parse_args(args):
 
 
 
-# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = 'cpu'
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 encoder = Encoder().eval().to(device)
 decoder = Decoder().eval().to(device)
-
 transformer = MTranspose(matrix_size=32).to(device)
 
-checkpoint = torch.load(r"./src/models/checkpoints/TotalL_7.295699119567871_Content_5.415552139282227_Style_0.566848635673523/transformer.pth")
-transformer.load_state_dict(checkpoint)
-
-content_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im158.jpg').convert('RGB')
-style_image = Image.open(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\888440.jpg').convert('RGB')
-trans = transforms.Compose([
-            # transforms.Resize((64, 64)),
-            transforms.ToTensor()
-        ])
-content_tensor = trans(content_image).to(device)
-style_tensor = trans(style_image).to(device)
+checkpoint = torch.load(r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\models\checkpoints\training_session\trans_size32\TotalL_6.053393363952637_Content_1.5243605375289917_Style_2.729487419128418\transformer80000.pth")
+transformer.load_state_dict(checkpoint['model_state_dict'])
 transformer.eval()
-encode_Cfeatures = encoder(content_tensor.unsqueeze(0))
-encode_Sfeatures = encoder(style_tensor.unsqueeze(0))
-transformed_features = transformer(encode_Cfeatures, encode_Sfeatures)
-decode_img = decoder(transformed_features)
 
-# Convert tensor images to numpy arrays and adjust their shape if needed
-image1_np = content_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()  # Adjust dimensions as per your tensor shape
-image2_np = style_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()
-image3_np = decode_img.squeeze().permute(1, 2, 0).detach().cpu().numpy() # Adjust dimensions as per your tensor shape
-
-# Create a figure with subplots
-fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(10, 4))
-
-# Plot each image on a separate subplot
-axes[0].imshow(image1_np)
-axes[0].set_title('Content')
-axes[0].axis('off')
-
-axes[1].imshow(image2_np)
-axes[1].set_title('Style')
-axes[1].axis('off')
-
-axes[2].imshow(image3_np)
-axes[2].set_title('Stylized content')
-axes[2].axis('off')
-
-# Adjust the spacing between subplots
-plt.tight_layout()
-
-# Save the figure
-plt.savefig('image_plot.png')  # Specify the desired file name and extension
-
-# Show the figure (optional)
-plt.show()
-
-# plot_image(content_tensor.detach().cpu())
-# plot_image(decode_img.detach().cpu())
-# plot_image(style_tensor.unsqueeze(0).detach().cpu())
-# Convert the tensor back to an image
-final_image = transforms.ToPILImage()(decode_img.squeeze(0).detach().cpu())
-
-# Save the final stylized image
-final_image.save("stylized_image1.jpg")
+Trainer.plot_comparison(encoder, decoder, transformer,
+                        r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\mirflickr\im404.jpg',
+                        r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\Art_by_number\train_9\9079.jpg',
+                        transforms.Compose([
+                            transforms.Resize(256),
+                            transforms.ToTensor()
+                        ]),
+                        device,
+                        sleep=20)
