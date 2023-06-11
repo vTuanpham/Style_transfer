@@ -48,6 +48,7 @@ class Trainer:
                  beta: float,
                  gamma: float,
                  login_key: str,
+                 warm_up_epoch: int = 1,
                  plot_per_epoch: bool = False,
                  resume_from_checkpoint: str = None,
                  vgg_model_type: str = '19',
@@ -80,6 +81,7 @@ class Trainer:
         self.transformer_size = transformer_size
         self.layer_depth = layer_depth
         self.deep_learner = deep_learner
+        self.warm_up_epoch = warm_up_epoch
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -111,7 +113,7 @@ class Trainer:
                         "deep_learner": self.deep_learner,
                         "transformer_size": self.transformer_size
                         }
-                    )
+                )
             except Exception:
                 raise "Not login yet!"
         else:
@@ -183,10 +185,18 @@ class Trainer:
         encoder, decoder, transformer, content_extractors, style_extractors = self.build_model()
 
         # Define the optimizer
-        transformer_optimizer  = optim.Adam(transformer.parameters(), lr=self.learning_rate)
+        transformer_optimizer = optim.Adam(transformer.parameters(), lr=self.learning_rate)
 
         # Define the learning rate scheduler
-        scheduler = lr_scheduler.LambdaLR(transformer_optimizer, lr_lambda=lambda epoch: 0.1 ** (epoch / 10))
+
+        def lr_lambda(epoch, warm_up_epoch):
+            if epoch < warm_up_epoch:
+                return epoch / warm_up_epoch
+            else:
+                return 0.1 ** ((epoch - warm_up_epoch) / 10)
+
+        scheduler = lr_scheduler.LambdaLR(transformer_optimizer,
+                                          lr_lambda=lambda epoch: lr_lambda(epoch, self.warm_up_epoch))
 
         init_epoch = 0
         loss_list = []
@@ -219,7 +229,7 @@ class Trainer:
                 warnings.warn("Checkpoint missing info!")
                 pass
 
-            loss_list.append(float(total_loss.item()))
+            loss_list.append(total_loss)
             last_session_epoch = checkpoint['epoch']
             print(f"\n Loss from previous training session: {float(total_loss.item())}"
                   f"\n Last training session epoch: {last_session_epoch+1}")
