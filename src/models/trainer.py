@@ -48,7 +48,7 @@ class Trainer:
                  beta: float,
                  gamma: float,
                  login_key: str,
-                 warm_up_epoch: int,
+                 warm_up_epoch: int = 1,
                  plot_per_epoch: bool = False,
                  resume_from_checkpoint: str = None,
                  vgg_model_type: str = '19',
@@ -81,6 +81,7 @@ class Trainer:
         self.transformer_size = transformer_size
         self.layer_depth = layer_depth
         self.deep_learner = deep_learner
+        self.warm_up_epoch = warm_up_epoch
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -188,14 +189,14 @@ class Trainer:
 
         # Define the learning rate scheduler
 
-        def lr_lambda(epoch, warmup_step):
-            if epoch < warmup_step:
-                return epoch / warmup_step
+        def lr_lambda(epoch, warm_up_epoch):
+            if epoch < warm_up_epoch:
+                return epoch / warm_up_epoch
             else:
-                return 0.1 ** ((epoch - warmup_step) / 10)
+                return 0.1 ** ((epoch - warm_up_epoch) / 10)
 
         scheduler = lr_scheduler.LambdaLR(transformer_optimizer,
-                                          lr_lambda=lambda epoch: lr_lambda(epoch, self.warmup_step))
+                                          lr_lambda=lambda epoch: lr_lambda(epoch, self.warm_up_epoch))
 
         init_epoch = 0
         loss_list = []

@@ -51,6 +51,8 @@ def parse_args(args):
         ))
     parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help="Initial learning rate (after the potential warmup period) to use.")
+    parser.add_argument('--warm_up_epoch', type=int, default=1,
+                        help="Warmup period")
     parser.add_argument('--alpha', type=float, default=5e-5,
                         help="Initial alpha to use.")
     parser.add_argument('--beta', type=float, default=5e-5,
@@ -112,6 +114,7 @@ def main(args):
         "gradient_accumulation_steps": args.gradient_accumulation_steps,
         "do_eval_per_epoch": args.do_eval_per_epoch,
         "plot_per_epoch": args.plot_per_epoch,
+        "warm_up_epoch": args.warm_up_epoch,
         "learning_rate": args.learning_rate,
         "vgg_model_type": args.vgg_model_type,
         "transformer_size": args.transformer_size,
