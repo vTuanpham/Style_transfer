@@ -32,6 +32,10 @@ def parse_args(args):
                         help="Whether to enable experiment trackers for logging.")
     parser.add_argument('--resume_from_checkpoint', type=str, default=None,
                         help="If the training should continue from a checkpoint folder. (can be bool or string)")
+    parser.add_argument('--login_key', type=str, default=None,
+                        help="Login key for wandb")
+    parser.add_argument('--plot_per_epoch', action='store_true',
+                        help="Whether to plot comparison per epoch.")
     parser.add_argument('--do_eval_per_epoch', action='store_true',
                         help="Whether to run evaluate per epoch.")
     parser.add_argument('--transformer_size', type=int, default=32,
@@ -107,12 +111,13 @@ def main(args):
         "per_device_batch_size":dataloaders.batch_size,
         "gradient_accumulation_steps": args.gradient_accumulation_steps,
         "do_eval_per_epoch": args.do_eval_per_epoch,
+        "plot_per_epoch": args.plot_per_epoch,
         "learning_rate": args.learning_rate,
         "vgg_model_type": args.vgg_model_type,
         "transformer_size": args.transformer_size,
         "layer_depth": args.CNN_layer_depth,
         "deep_learner": args.deep_learner,
-        "login_key": None,
+        "login_key": args.login_key,
         "seed": args.seed,
         "alpha": args.alpha,
         "beta": args.beta,

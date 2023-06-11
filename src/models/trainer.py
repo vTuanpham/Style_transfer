@@ -1,7 +1,10 @@
+import io
 import random
 import sys
 import os
 import time
+import warnings
+
 sys.path.insert(0,r'./') #Add root directory here
 
 import torch
@@ -45,6 +48,7 @@ class Trainer:
                  beta: float,
                  gamma: float,
                  login_key: str,
+                 plot_per_epoch: bool = False,
                  resume_from_checkpoint: str = None,
                  vgg_model_type: str = '19',
                  with_tracking: bool = False,
@@ -65,6 +69,7 @@ class Trainer:
         self.gamma = gamma
         self.delta = delta
         self.with_tracking = with_tracking
+        self.plot_per_epoch = plot_per_epoch
         self.login_key = login_key if with_tracking else None
         self.vgg_model_type = vgg_model_type
         self.resume_from_checkpoint = resume_from_checkpoint
@@ -84,24 +89,31 @@ class Trainer:
         self.hist_loss = HistLoss()
 
         if self.with_tracking:
-            # Initialize tracker
-            self.wandb.login(self.login_key)
-            self.wandb = wandb.init(
-                project=PRJ_NAME,
-                # track hyperparameters and run metadata
-                config={
-                    "learning_rate": self.learning_rate,
-                    "feature_extractor": self.vgg_model_type,
-                    "loss_content_weight": self.alpha,
-                    "loss_style_weight": self.beta,
-                    "loss_variation_weight": self.gamma,
-                    "epochs": self.num_train_epochs,
-                    "content_layers_idx": self.content_layers_idx,
-                    "style_layers_idx": self.style_layers_idx,
-                    "device": self.device,
-                    "batch_size": self.per_device_batch_size
-                    }
-                )
+            try:
+                print(f"--- Initializing wandb {PRJ_NAME} --- ")
+                # Initialize tracker
+                self.wandb = wandb.init(
+                    project=PRJ_NAME,
+                    # track hyperparameters and run metadata
+                    config={
+                        "learning_rate": self.learning_rate,
+                        "feature_extractor": self.vgg_model_type,
+                        "loss_content_weight": self.alpha,
+                        "loss_style_weight": self.beta,
+                        "loss_variation_weight": self.gamma,
+                        "loss_histogram_weight": self.delta,
+                        "epochs": self.num_train_epochs,
+                        "content_layers_idx": self.content_layers_idx,
+                        "style_layers_idx": self.style_layers_idx,
+                        "device": self.device,
+                        "batch_size": self.per_device_batch_size,
+                        "layer_depth": self.layer_depth,
+                        "deep_learner": self.deep_learner,
+                        "transformer_size": self.transformer_size
+                        }
+                    )
+            except Exception:
+                raise "Not login yet!"
         else:
             self.wandb = None
 
@@ -178,6 +190,10 @@ class Trainer:
 
         init_epoch = 0
         loss_list = []
+        completed_step = 0
+        total_epoch_loss, total_epoch_content_loss = 0, 0
+        total_epoch_style_loss, total_epoch_var_loss = 0, 0
+        total_epoch_hist_loss = 0
         if self.resume_from_checkpoint is not None:
             checkpoint_dir = os.path.basename(os.path.dirname(os.path.realpath(self.resume_from_checkpoint)))
             print(f"\n --- Resume from checkpoint {checkpoint_dir}--- \n")
@@ -198,7 +214,14 @@ class Trainer:
             except Exception:
                 raise "Unable to load optimizer state!"
 
-            total_loss = checkpoint['loss']
+            try:
+                total_loss = checkpoint['loss']
+                last_session_completed_step = checkpoint['completed_step']
+                completed_step += last_session_completed_step
+            except Exception:
+                warnings.warn("Checkpoint missing info!")
+                pass
+
             loss_list.append(float(total_loss.item()))
             last_session_epoch = checkpoint['epoch']
             print(f"\n Loss from previous training session: {float(total_loss.item())}"
@@ -266,43 +289,76 @@ class Trainer:
                 total_loss.backward()
                 transformer_optimizer.step()
 
+                completed_step += step
+                total_epoch_loss += float(total_loss.item())
+                total_epoch_content_loss += float(loss_content.item())
+                total_epoch_style_loss += float(loss_style.item())
+                total_epoch_var_loss += float(variation_loss.item())
+                total_epoch_hist_loss += float(histogram_loss.item())
+
+                if self.with_tracking:
+                    self.wandb.log({"Loss_content_contributed_batch": loss_content * self.alpha,
+                                    "Loss_style_contributed_batch": loss_style * self.beta,
+                                    "Loss_variation_contributed_batch": variation_loss * self.gamma,
+                                    "Loss_histogram_contributed_batch": histogram_loss * self.delta,
+                                    "Total_loss_batch": float(total_loss.item())}, step=completed_step)
+
             # Update learning rate
             scheduler.step()
+            avg_epoch_total_loss = total_epoch_loss / len(self.dataloaders)
+            avg_epoch_content_loss = total_epoch_content_loss / len(self.dataloaders)
+            avg_epoch_style_loss = total_epoch_style_loss / len(self.dataloaders)
+            avg_epoch_var_loss = total_epoch_var_loss / len(self.dataloaders)
+            avg_epoch_hist_loss = total_epoch_hist_loss / len(self.dataloaders)
 
-            loss_list.append(float(total_loss.item()))
+            loss_list.append(avg_epoch_total_loss)
             # Print the loss for monitoring
             print(f"\n --- Training log --- \n")
             print(f"   Epoch [{epoch + 1}/{self.num_train_epochs}]"
-                  f"\n Total Loss: {total_loss.item()}"
-                  f"\n Loss content: {loss_content} | Contributed content loss: {loss_content*self.alpha}"
-                  f"\n Loss style: {loss_style} | Contributed style loss: {loss_style*self.beta}"
-                  f"\n Loss variation: {variation_loss} | Contributed variation loss: {variation_loss*self.gamma}"
-                  f"\n Loss histogram: {histogram_loss} | Contributed histogram loss: {histogram_loss*self.delta}"
+                  f"\n Total Loss: {avg_epoch_total_loss}"
+                  f"\n Loss content: {avg_epoch_content_loss} | Contributed content loss: {avg_epoch_content_loss*self.alpha}"
+                  f"\n Loss style: {avg_epoch_style_loss} | Contributed style loss: {avg_epoch_style_loss*self.beta}"
+                  f"\n Loss variation: {avg_epoch_var_loss} | Contributed variation loss: {avg_epoch_var_loss*self.gamma}"
+                  f"\n Loss histogram: {avg_epoch_hist_loss} | Contributed histogram loss: {avg_epoch_hist_loss*self.delta}"
                   f"\n Minimum loss of overall training session: {min(loss_list)} \n")
 
-            if self.with_tracking:
-                print("--- Logging to wandb ---")
-                self.wandb.log({"Loss_content_contributed": loss_content*self.alpha,
-                                "Loss_style_contributed": loss_style*self.beta,
-                                "Loss_variation_contributed": variation_loss*self.gamma,
-                                "Loss_histogram_contributed": histogram_loss*self.delta,
-                                "Total_loss": float(total_loss.item()),
-                                "Min_loss": min(loss_list)}, step=epoch)
-
-            print(f"\n Plotting comparison of epoch [{epoch + 1}/{self.num_train_epochs}]... \n")
+            if self.plot_per_epoch:
+                print(f"\n Plotting comparison of epoch [{epoch + 1}/{self.num_train_epochs}]... \n")
             plot = self.plot_comparison(encoder, decoder, transformer,
-                                         r"./src/data/dummy/content/im3.jpg", r"./src/data/dummy/style/888440.jpg",
+                                         r"./src/data/dummy/content/im1.jpg", r"./src/data/dummy/style/85343.jpg",
                                          transforms.Compose([
                                              transforms.Resize(256),
                                              transforms.ToTensor()
-                                         ]), self.device)
+                                         ]), self.device, plot=self.plot_per_epoch)
 
-            if float(total_loss.item()) == min(loss_list):
+            if self.with_tracking:
+                print("--- Logging to wandb ---")
+                self.wandb.log({"Epoch": epoch,
+                                "Loss_content_contributed": avg_epoch_content_loss*self.alpha,
+                                "Loss_style_contributed": avg_epoch_style_loss*self.beta,
+                                "Loss_variation_contributed": avg_epoch_var_loss*self.gamma,
+                                "Loss_histogram_contributed": avg_epoch_hist_loss*self.delta,
+                                "Total_loss": avg_epoch_total_loss,
+                                "Min_loss": min(loss_list)}, step=completed_step)
+                try:
+                    io_buf = io.BytesIO()
+                    plot.savefig(io_buf, format='raw')
+                    io_buf.seek(0)
+                    comparison_plot = wandb.Image(Image.frombytes('RGBA', (1000, 400), io_buf.getvalue(), 'raw'),
+                                                  caption=f"Comparison of epoch {epoch}")
+                    io_buf.close()
+                    self.wandb.log({"Examples": comparison_plot}, step=completed_step)
+                except Exception:
+                    warnings.warn("Unable to log examples to wandb")
+                    pass
+
+            if avg_epoch_total_loss == min(loss_list):
                 print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
-                self.save(transformer, transformer_optimizer, info={"total": total_loss,
-                                                                    "content": loss_content,
-                                                                    "style": loss_style,
-                                                                    "epoch": epoch
+                self.save(transformer, transformer_optimizer, info={"total": avg_epoch_total_loss,
+                                                                    "content": avg_epoch_content_loss,
+                                                                    "style": avg_epoch_style_loss,
+                                                                    "epoch": epoch,
+                                                                    "completed_step": completed_step
                                                                     }, result=plot)
             else:
                 print(f"Discarding epoch [{epoch + 1}/{self.num_train_epochs}]")
@@ -313,7 +369,7 @@ class Trainer:
             self.wandb.finish()
 
     def save(self, transformer, transformer_optimizer, discriminator=None, info=None, result=None):
-        dir_name = f"TotalL_{float(info['total'].item())}_Content_{info['content']}_Style_{info['style']}"
+        dir_name = f"TotalL_{info['total']}_Content_{info['content']}_Style_{info['style']}"
         save_path_dir = os.path.join(self.output_dir, dir_name)
         print(f" Saving in {save_path_dir}")
         if not os.path.exists(save_path_dir):
@@ -327,7 +383,8 @@ class Trainer:
             'epoch': info['epoch'],
             'model_state_dict': transformer.state_dict(),
             'optimizer_state_dict': transformer_optimizer.state_dict(),
-            'loss': info['total']
+            'loss': info['total'],
+            'completed_step': info['completed_step']
         }, model_path)
         result.savefig(plot_path)
 
@@ -336,8 +393,8 @@ class Trainer:
             torch.save(discriminator.state_dict(), model_path)
 
     @staticmethod
-    def plot_comparison(encoder, decoder, transformer, content_img_url,
-                        style_img_url, transformation, device, sleep: int = 5):
+    def plot_comparison(encoder, decoder, transformer, content_img_url, style_img_url,
+                        transformation, device, sleep: int = 5, plot: bool=True):
         try:
             content_image = Image.open(content_img_url).convert('RGB')
             style_image = Image.open(style_img_url).convert('RGB')
@@ -381,7 +438,8 @@ class Trainer:
         plt.tight_layout()
 
         # Show the figure (optional)
-        plt.show(block=False)
-        plt.pause(sleep)
+        if plot:
+            plt.show(block=False)
+            plt.pause(sleep)
 
         return plt
