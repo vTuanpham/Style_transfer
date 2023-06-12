@@ -225,18 +225,20 @@ class Trainer:
                 total_loss = checkpoint['loss']
                 last_session_completed_step = checkpoint['completed_step']
                 completed_step += last_session_completed_step
-            except Exception:
+
+                loss_list.append(total_loss)
+                last_session_epoch = checkpoint['epoch']
+                print(f"\n Loss from previous training session: {total_loss}"
+                      f"\n Last training session epoch: {last_session_epoch + 1}")
+
+                if last_session_epoch + 1 < self.num_train_epochs:
+                    init_epoch = last_session_epoch + 1
+                else:
+                    raise "Num train epoch can't be smaller than last session epoch resume from checkpoint!"
+
+            except AttributeError:
                 warnings.warn("Checkpoint missing info!")
                 pass
-
-            loss_list.append(total_loss)
-            last_session_epoch = checkpoint['epoch']
-            print(f"\n Loss from previous training session: {total_loss}"
-                  f"\n Last training session epoch: {last_session_epoch+1}")
-            if last_session_epoch+1 < self.num_train_epochs:
-                init_epoch = last_session_epoch+1
-            else:
-                raise "Num train epoch can't be smaller than last session epoch resume from checkpoint!"
 
         print(f"\n --- Training init log --- \n")
         print(f"\n Number of epoch: {self.num_train_epochs}"
@@ -395,7 +397,10 @@ class Trainer:
             'model_state_dict': transformer.state_dict(),
             'optimizer_state_dict': transformer_optimizer.state_dict(),
             'loss': info['total'],
-            'completed_step': info['completed_step']
+            'completed_step': info['completed_step'],
+            "trans_size": self.transformer_size,
+            "layer_depth": self.layer_depth,
+            "deep_learner": self.deep_learner
         }, model_path)
         result.savefig(plot_path)
 
@@ -431,6 +436,11 @@ class Trainer:
 
         # Create a figure with subplots
         fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(10, 4))
+
+        # Normalize 0 - 1
+        image1_np = np.interp(image1_np, (image1_np.min(), image1_np.max()), (0, 1))
+        image2_np = np.interp(image2_np, (image2_np.min(), image2_np.max()), (0, 1))
+        image3_np = np.interp(image3_np, (image3_np.min(), image3_np.max()), (0, 1))
 
         # Plot each image on a separate subplot
         axes[0].imshow(image1_np)
