@@ -50,6 +50,7 @@ class Trainer:
                  login_key: str,
                  warm_up_epoch: int = 1,
                  plot_per_epoch: bool = False,
+                 save_best: bool = True,
                  resume_from_checkpoint: str = None,
                  vgg_model_type: str = '19',
                  with_tracking: bool = False,
@@ -71,6 +72,7 @@ class Trainer:
         self.delta = delta
         self.with_tracking = with_tracking
         self.plot_per_epoch = plot_per_epoch
+        self.save_best = save_best
         self.login_key = login_key if with_tracking else None
         self.vgg_model_type = vgg_model_type
         self.resume_from_checkpoint = resume_from_checkpoint
@@ -188,7 +190,6 @@ class Trainer:
         transformer_optimizer = optim.Adam(transformer.parameters(), lr=self.learning_rate)
 
         # Define the learning rate scheduler
-
         def lr_lambda(epoch, warm_up_epoch):
             if epoch < warm_up_epoch:
                 return epoch / warm_up_epoch
@@ -222,22 +223,33 @@ class Trainer:
                 raise "Unable to load optimizer state!"
 
             try:
+                criterion = checkpoint['criterion']
                 total_loss = checkpoint['loss']
+                print(f"\n Loss from previous training session: {total_loss}")
+                if criterion['alpha'] == self.alpha and criterion['beta'] == self.beta\
+                        and criterion['gamma'] == self.gamma and criterion['delta'] == self.delta\
+                        and criterion['content_layers_idx'] == self.content_layers_idx \
+                        and criterion['style_layers_idx'] == self.style_layers_idx:
+                    loss_list.append(total_loss)
+                else:
+                    warnings.warn("Last session loss discarded due to changed loss criteria")
+            except KeyError:
+                warnings.warn("checkpoint missing criterion info!")
+                pass
+
+            try:
                 last_session_completed_step = checkpoint['completed_step']
                 completed_step += last_session_completed_step
 
-                loss_list.append(total_loss)
                 last_session_epoch = checkpoint['epoch']
-                print(f"\n Loss from previous training session: {total_loss}"
-                      f"\n Last training session epoch: {last_session_epoch + 1}")
+                print(f"\n Last training session epoch: {last_session_epoch + 1}")
 
                 if last_session_epoch + 1 < self.num_train_epochs:
                     init_epoch = last_session_epoch + 1
                 else:
                     raise "Num train epoch can't be smaller than last session epoch resume from checkpoint!"
-
-            except AttributeError:
-                warnings.warn("Checkpoint missing info!")
+            except KeyError:
+                warnings.warn("Checkpoint missing train process info!")
                 pass
 
         print(f"\n --- Training init log --- \n")
@@ -365,7 +377,15 @@ class Trainer:
                     warnings.warn("Unable to log examples to wandb")
                     pass
 
-            if avg_epoch_total_loss == min(loss_list):
+            if avg_epoch_total_loss == min(loss_list) and self.save_best:
+                print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
+                self.save(transformer, transformer_optimizer, info={"total": avg_epoch_total_loss,
+                                                                    "content": avg_epoch_content_loss,
+                                                                    "style": avg_epoch_style_loss,
+                                                                    "epoch": epoch,
+                                                                    "completed_step": completed_step
+                                                                    }, result=plot)
+            elif not self.save_best:
                 print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
                 self.save(transformer, transformer_optimizer, info={"total": avg_epoch_total_loss,
                                                                     "content": avg_epoch_content_loss,
@@ -400,7 +420,15 @@ class Trainer:
             'completed_step': info['completed_step'],
             "trans_size": self.transformer_size,
             "layer_depth": self.layer_depth,
-            "deep_learner": self.deep_learner
+            "deep_learner": self.deep_learner,
+            "criterion": {
+                "alpha": self.alpha,
+                "beta": self.beta,
+                "gamma": self.gamma,
+                "delta": self.delta,
+                "content_layers_idx": self.content_layers_idx,
+                "style_layers_idx": self.style_layers_idx
+            }
         }, model_path)
         result.savefig(plot_path)
 
@@ -410,7 +438,7 @@ class Trainer:
 
     @staticmethod
     def plot_comparison(encoder, decoder, transformer, content_img_url, style_img_url,
-                        transformation, device, sleep: int = 5, plot: bool=True):
+                        transformation, device, sleep: int = 5, plot: bool = True):
         try:
             content_image = Image.open(content_img_url).convert('RGB')
             style_image = Image.open(style_img_url).convert('RGB')
