@@ -97,6 +97,9 @@ class Trainer:
         self.hist_loss = HistLoss()
 
         if self.with_tracking:
+            if wandb.__version__ != '0.13.9':
+                raise "Wandb mismatch error!, please install the correct version as the artifact log of " \
+                      "this implementation only support for this particular version"
             try:
                 print(f"--- Initializing wandb {PRJ_NAME} --- ")
                 # Initialize tracker
