@@ -28,6 +28,7 @@ from torch.nn import MSELoss as ContentLoss
 from src.models.generator import Encoder, Decoder
 from src.models.transformer import MTranspose
 from src.utils.image_plot import plot_image
+from src.utils.utils import set_seed
 
 
 PRJ_NAME = "Style_transfer"
@@ -37,7 +38,6 @@ class Trainer:
     def __init__(self,
                  dataloaders,
                  output_dir: str,
-                 seed: int,
                  num_train_epochs: int,
                  weight_decay,
                  per_device_batch_size: int,
@@ -48,12 +48,14 @@ class Trainer:
                  beta: float,
                  gamma: float,
                  login_key: str,
+                 seed: int = 42,
                  warm_up_epoch: int = 1,
                  plot_per_epoch: bool = False,
                  save_best: bool = True,
                  resume_from_checkpoint: str = None,
                  vgg_model_type: str = '19',
                  with_tracking: bool = False,
+                 log_weights_cpkt: bool = False,
                  delta: float = 2,
                  transformer_size: int = 32,
                  layer_depth: int = 1,
@@ -71,6 +73,7 @@ class Trainer:
         self.gamma = gamma
         self.delta = delta
         self.with_tracking = with_tracking
+        self.log_weights_cpkt = log_weights_cpkt
         self.plot_per_epoch = plot_per_epoch
         self.save_best = save_best
         self.login_key = login_key if with_tracking else None
@@ -85,6 +88,7 @@ class Trainer:
         self.deep_learner = deep_learner
         self.warm_up_epoch = warm_up_epoch
 
+        set_seed(seed)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self.variation_loss = TVLoss()
@@ -113,9 +117,25 @@ class Trainer:
                         "batch_size": self.per_device_batch_size,
                         "layer_depth": self.layer_depth,
                         "deep_learner": self.deep_learner,
-                        "transformer_size": self.transformer_size
+                        "transformer_size": self.transformer_size,
+                        "num_batch": self.dataloaders,
+                        "num_exampes": self.dataloaders.dataset
                         }
                 )
+                if self.log_weights_cpkt:
+                    try:
+                        self.artifact = wandb.Artifact(name=f"Checkpoints_{PRJ_NAME}",
+                                                   type='model', description="Model checkpoint for style transfer")
+                        print(f"\n Creating new artifact to save cpkt...")
+                    except Exception:
+                        try:
+                            self.artifact = self.wandb.use_artifact(artifact_or_name=f"Checkpoints_{PRJ_NAME}")
+                            print(f"\n Using saved artifact to save cpkt...")
+                        except Exception:
+                            raise "Unable to creating or initializing artifact to log cpkt!"
+                else:
+                    self.artifact = None
+
             except Exception:
                 raise "Not login yet!"
         else:
@@ -412,6 +432,7 @@ class Trainer:
 
         model_path = os.path.join(save_path_dir, f"transformer{len(self.dataloaders.dataset)}" + ".pth")
         plot_path = os.path.join(save_path_dir, "result_plot.png")
+        # Save weights at output dir
         torch.save({
             'epoch': info['epoch'],
             'model_state_dict': transformer.state_dict(),
@@ -431,6 +452,11 @@ class Trainer:
             }
         }, model_path)
         result.savefig(plot_path)
+
+        if self.with_tracking and self.log_weights_cpkt:
+            print(f" --- Saving {PRJ_NAME} checkpoint to wandb ---")
+            self.artifact.add_dir(local_path=save_path_dir, name=f"Checkpoint_{PRJ_NAME}")
+            self.wandb.log_artifact(self.artifact)
 
         if discriminator is not None:
             model_path = os.path.join(self.output_dir, "discriminator" + ".pth")
