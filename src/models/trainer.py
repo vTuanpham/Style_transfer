@@ -118,8 +118,8 @@ class Trainer:
                         "layer_depth": self.layer_depth,
                         "deep_learner": self.deep_learner,
                         "transformer_size": self.transformer_size,
-                        "num_batch": self.dataloaders,
-                        "num_exampes": self.dataloaders.dataset
+                        "num_batch": len(self.dataloaders),
+                        "num_exampes": len(self.dataloaders.dataset)
                         }
                 )
                 if self.log_weights_cpkt:
@@ -428,6 +428,7 @@ class Trainer:
         if not os.path.exists(save_path_dir):
             os.makedirs(save_path_dir, exist_ok=False)
         else:
+            warnings.warn("File exist!, might be a good idea to change seed")
             raise FileExistsError
 
         model_path = os.path.join(save_path_dir, f"transformer{len(self.dataloaders.dataset)}" + ".pth")
@@ -455,8 +456,18 @@ class Trainer:
 
         if self.with_tracking and self.log_weights_cpkt:
             print(f" --- Saving {PRJ_NAME} checkpoint to wandb ---")
-            self.artifact.add_dir(local_path=save_path_dir, name=f"Checkpoint_{PRJ_NAME}")
-            self.wandb.log_artifact(self.artifact)
+            try:
+                self.artifact.add_dir(local_path=save_path_dir, name=f"Checkpoint_{PRJ_NAME}_{dir_name}")
+                self.wandb.log_artifact(self.artifact)
+            except ValueError:
+                try:
+                    self.artifact = wandb.Artifact(name=f"Checkpoints_{PRJ_NAME}",
+                                                   type='model', description="Model checkpoint for style transfer")
+                    print(f"\n Using saved artifact to save cpkt...")
+                    self.artifact.add_dir(local_path=save_path_dir, name=f"Checkpoint_{PRJ_NAME}_{dir_name}")
+                    self.wandb.log_artifact(self.artifact)
+                except Exception:
+                    raise "Unable to creating or initializing artifact to log cpkt!"
 
         if discriminator is not None:
             model_path = os.path.join(self.output_dir, "discriminator" + ".pth")

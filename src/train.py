@@ -80,6 +80,13 @@ def parse_args(args):
     # except:
     #     args.checkpointing_steps = args.checkpointing_steps  # if conversion fails, assume it's a string
 
+    # Sanity check
+    assert os.path.isdir(args.output_dir), "Invalid output dir path!"
+    assert os.path.isdir(args.content_datapath), "Invalid content dir path!"
+    assert os.path.isdir(args.style_datapath), "Invalid style dir path!"
+    assert os.path.isfile(args.resume_from_checkpoint) \
+        if args.resume_from_checkpoint is not None else True , "Invalid cpkt path!"
+
     return args
 
 
