@@ -30,6 +30,8 @@ def parse_args(args):
                         help="number training epochs")
     parser.add_argument('--with_tracking', action='store_true',
                         help="Whether to enable experiment trackers for logging.")
+    parser.add_argument('--log_weights_cpkt', action='store_true',
+                        help="Whether to log weights to tracker")
     parser.add_argument('--resume_from_checkpoint', type=str, default=None,
                         help="If the training should continue from a checkpoint folder. (can be bool or string)")
     parser.add_argument('--login_key', type=str, default=None,
@@ -127,7 +129,8 @@ def main(args):
         "gamma": args.gamma,
         "delta": args.delta,
         "content_layers_idx": args.content_layers_idx,
-        "style_layers_idx": args.style_layers_idx
+        "style_layers_idx": args.style_layers_idx,
+        "log_weights_cpkt": args.log_weights_cpkt
     }
     trainer = Trainer(**trainer_args)
     trainer.train()
