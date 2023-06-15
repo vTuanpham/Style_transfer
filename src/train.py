@@ -28,6 +28,8 @@ def parse_args(args):
     # Training
     parser.add_argument('--num_train_epochs', type=int, default=10,
                         help="number training epochs")
+    parser.add_argument('--step_frequency', type=float, default=0.5,
+                        help="How often should you update the lr (Should be a fraction of an epoch)")
     parser.add_argument('--with_tracking', action='store_true',
                         help="Whether to enable experiment trackers for logging.")
     parser.add_argument('--log_weights_cpkt', action='store_true',
@@ -137,7 +139,8 @@ def main(args):
         "delta": args.delta,
         "content_layers_idx": args.content_layers_idx,
         "style_layers_idx": args.style_layers_idx,
-        "log_weights_cpkt": args.log_weights_cpkt
+        "log_weights_cpkt": args.log_weights_cpkt,
+        "step_frequency": args.step_frequency
     }
     trainer = Trainer(**trainer_args)
     trainer.train()

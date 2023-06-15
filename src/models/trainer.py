@@ -3,6 +3,7 @@ import random
 import sys
 import os
 import time
+import math
 import warnings
 
 sys.path.insert(0,r'./') #Add root directory here
@@ -57,6 +58,7 @@ class Trainer:
                  with_tracking: bool = False,
                  log_weights_cpkt: bool = False,
                  delta: float = 2,
+                 step_frequency: float = 0.5,
                  transformer_size: int = 32,
                  layer_depth: int = 1,
                  deep_learner: bool = False,
@@ -87,6 +89,7 @@ class Trainer:
         self.layer_depth = layer_depth
         self.deep_learner = deep_learner
         self.warm_up_epoch = warm_up_epoch
+        self.step_frequency = step_frequency
 
         set_seed(seed)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -121,6 +124,7 @@ class Trainer:
                         "layer_depth": self.layer_depth,
                         "deep_learner": self.deep_learner,
                         "transformer_size": self.transformer_size,
+                        "step_frequency": self.step_frequency,
                         "num_batch": len(self.dataloaders),
                         "num_exampes": len(self.dataloaders.dataset)
                         }
@@ -275,12 +279,20 @@ class Trainer:
                 warnings.warn("Checkpoint missing train process info!")
                 pass
 
+        # Calculate how often should we update the lr
+        total_steps = len(self.dataloaders) * (self.num_train_epochs-init_epoch)
+        steps_per_epoch = len(self.dataloaders)
+        scheduler_steps = math.ceil(steps_per_epoch *  self.step_frequency)
+        scheduler_count = 0
+
         print(f"\n --- Training init log --- \n")
         print(f"\n Number of epoch: {self.num_train_epochs}"
               f"\n Init epoch: {init_epoch}"
               f"\n Batch size: {self.per_device_batch_size}"
               f"\n Total number of batch: {len(self.dataloaders)}"
               f"\n Total number of examples: {len(self.dataloaders.dataset)}"
+              f"\n Total number of steps: {total_steps}"
+              f"\n Number of steps before updating the lr: {scheduler_steps}"
               f"\n Transformation matrix size: {self.transformer_size}"
               f"\n Content layers loss idx: {self.content_layers_idx}"
               f"\n Style layers loss idx: {self.style_layers_idx}"
@@ -351,8 +363,14 @@ class Trainer:
                                     "Loss_histogram_contributed_batch": histogram_loss * self.delta,
                                     "Total_loss_batch": float(total_loss.item())}, step=completed_step)
 
-            # Update learning rate
-            scheduler.step()
+                # Update learning rate
+                scheduler_count += 1
+                if scheduler_count >= scheduler_steps:
+                    print(f"\n --- Learning rate update --- \n")
+                    scheduler.step()
+                    scheduler_count = 0
+
+
             avg_epoch_total_loss = total_epoch_loss / len(self.dataloaders)
             avg_epoch_content_loss = total_epoch_content_loss / len(self.dataloaders)
             avg_epoch_style_loss = total_epoch_style_loss / len(self.dataloaders)

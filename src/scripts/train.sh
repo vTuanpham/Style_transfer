@@ -22,6 +22,7 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --CNN_layer_depth 4                           \
                    --deep_learner                                \
                    --with_tracking                               \
-                   --log_weights_cpkt
+                   --log_weights_cpkt                            \
+                   --step_frequency 0.5
 
 
