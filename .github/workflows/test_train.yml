@@ -65,3 +65,6 @@ jobs:
 
       - name: Running training script
         run: bash src/scripts/train_test.sh
+
+      - name: Check saves
+        run: ls "./src/models/checkpoints/training_session"

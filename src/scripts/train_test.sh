@@ -16,6 +16,9 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --height 64                                   \
                    --crop_width 32                               \
                    --crop_height 32                              \
-                   --content_layers_idx 8 11 13                  \
-                   --style_layers_idx 1 3 6 8                    \
-                   --transformer_size 16
+                   --content_layers_idx 11 17 22 26              \
+                   --style_layers_idx 1 3 6 8 9 11               \
+                   --transformer_size 16                         \
+                   --CNN_layer_depth 2                           \
+                   --deep_learner                                \
+                   --step_frequency 0.3
