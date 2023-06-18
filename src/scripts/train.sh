@@ -4,7 +4,6 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --batch_size 5                                \
                    --max_style_train_samples 1000                \
                    --max_content_train_samples 1000              \
-                   --max_eval_samples 5                          \
                    --seed 42                                     \
                    --num_train_epochs 20                         \
                    --learning_rate 1e-4                          \
@@ -12,17 +11,16 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --beta 1.8                                    \
                    --gamma 2.3                                   \
                    --delta 4.5                                   \
-                   --width 128                                   \
-                   --height 128                                  \
                    --crop_width 256                              \
                    --crop_height 256                             \
-                   --content_layers_idx 11 17 22 26              \
-                   --style_layers_idx 1 3 6 8 11                 \
+                   --content_layers_idx 12 16 21                 \
+                   --style_layers_idx 0 5 10 19 28               \
                    --transformer_size 32                         \
-                   --CNN_layer_depth 4                           \
+                   --CNN_layer_depth 2                           \
                    --deep_learner                                \
                    --with_tracking                               \
                    --log_weights_cpkt                            \
-                   --step_frequency 0.5
-
+                   --step_frequency 0.5                          \
+                   --num_worker 4                                \
+                   --do_eval_per_epoch
 
