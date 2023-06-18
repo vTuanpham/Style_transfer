@@ -6,14 +6,17 @@ sys.path.insert(0,r'./') #Add root directory here
 import torchvision.transforms as transforms
 from src.data.dataloader import STDataloader
 from src.models.trainer import Trainer
+from src.utils.custom_transform import RGBToGrayscaleStacked, AddGaussianNoise
 
 
 def parse_args(args):
     parser = argparse.ArgumentParser()
     # Data
     parser.add_argument('--output_dir', type=str, help="The output directory to save")
-    parser.add_argument('--content_datapath', type=str, help="The path to content images dir")
-    parser.add_argument('--style_datapath', type=str, help="The path to style images dir")
+    parser.add_argument('--content_datapath', nargs='+', type=str,
+                        help="The path to content images dir (can be a list of paths)")
+    parser.add_argument('--style_datapath', nargs='+', type=str,
+                        help="The path to style images dir (can be a list of paths)")
     parser.add_argument('--batch_size', type=int, default=2, help="Batch size for the dataloader")
     parser.add_argument('--max_content_train_samples', type=int, default=None, help="Number of content training samples")
     parser.add_argument('--max_style_train_samples', type=int, default=None, help="Number of style training samples")
@@ -84,8 +87,10 @@ def parse_args(args):
 
     # Sanity check
     assert os.path.isdir(args.output_dir), "Invalid output dir path!"
-    assert os.path.isdir(args.content_datapath), "Invalid content dir path!"
-    assert os.path.isdir(args.style_datapath), "Invalid style dir path!"
+    for path in args.content_datapath:
+        assert os.path.isdir(path), "Invalid content dir path!"
+    for path in args.style_datapath:
+        assert os.path.isdir(path), "Invalid style dir path!"
     assert os.path.isfile(args.resume_from_checkpoint) \
         if args.resume_from_checkpoint is not None else True , "Invalid cpkt path!"
 
@@ -99,13 +104,21 @@ def main(args):
         "content_datapath": args.content_datapath,
         "style_datapath": args.style_datapath,
         "batch_size": args.batch_size,
-        "transform": transforms.Compose([
-            transforms.Resize((args.width, args.height)),
+        "transform_content": transforms.Compose([
+            transforms.CenterCrop((args.crop_width, args.crop_height)),
             transforms.ToTensor(),
+            RGBToGrayscaleStacked(),
             transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.5),
-            transforms.ColorJitter(brightness=0.35, contrast=0.4, saturation=0.37, hue=0.42),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.CenterCrop((args.crop_width, args.crop_height))
+            transforms.ColorJitter(brightness=0.2, contrast=0.4, saturation=0.3, hue=0.1),
+            transforms.RandomHorizontalFlip(p=0.5)
+        ]),
+        "transform_style": transforms.Compose([
+            transforms.CenterCrop((args.crop_width, args.crop_height)),
+            transforms.ToTensor(),
+            AddGaussianNoise(mean=0.5, sigma_range=(0., 0.08), p=0.5),
+            transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.5),
+            transforms.ColorJitter(brightness=0.2, contrast=0.25, saturation=0.3, hue=0.1),
+            transforms.RandomHorizontalFlip(p=0.5)
         ]),
         "max_style_train_samples": args.max_style_train_samples,
         "max_content_train_samples": args.max_content_train_samples,

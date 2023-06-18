@@ -151,9 +151,9 @@ class Trainer:
     @staticmethod
     def get_feature_extractor(selected_indices, vgg_model_type="16", device='cpu'):
         if vgg_model_type == "16":
-            vgg = models.vgg19(pretrained=True).features
+            vgg = models.vgg19(weights='IMAGENET1K_V1').features
         else:
-            vgg = models.vgg16(pretrained=True).features
+            vgg = models.vgg16(weights='IMAGENET1K_V1').features
 
         layers = list(vgg.children())
 
@@ -169,7 +169,7 @@ class Trainer:
 
     def build_model(self):
         encoder = Encoder().eval().to(self.device)
-        decoder = Decoder().to(self.device)
+        decoder = Decoder().eval().to(self.device)
 
         transformer = MTranspose(matrix_size=self.transformer_size,
                                  layer_depth=self.layer_depth, deep_learner=self.deep_learner).to(self.device)
@@ -224,12 +224,6 @@ class Trainer:
                 return 0.1 ** ((epoch - warm_up_epoch) / 10)
 
         scheduler = lr_scheduler.LambdaLR(transformer_optimizer,
-                                          lr_lambda=lambda epoch: lr_lambda(epoch, self.warm_up_epoch))
-
-        # Define the decoder optimizer
-        decoder_optimizer = optim.Adam(decoder.parameters(), lr=self.learning_rate)
-
-        decoder_scheduler = lr_scheduler.LambdaLR(decoder_optimizer,
                                           lr_lambda=lambda epoch: lr_lambda(epoch, self.warm_up_epoch))
 
         init_epoch = 0
@@ -313,7 +307,6 @@ class Trainer:
             total_epoch_style_loss, total_epoch_var_loss = 0, 0
             total_epoch_hist_loss = 0
             transformer.train()
-            decoder.train()
             for step, batch in enumerate(tqdm(self.dataloaders, colour='blue', desc="Training batch progress",
                                               position=1, leave=False, file=sys.stdout)):
                 content_imgs = batch['content_image'].to(self.device)
@@ -353,10 +346,8 @@ class Trainer:
 
                 # Backpropagation and optimization
                 transformer_optimizer.zero_grad()
-                decoder_optimizer.zero_grad()
                 total_loss.backward()
                 transformer_optimizer.step()
-                decoder_optimizer.step()
 
                 completed_step += step
                 total_epoch_loss += float(total_loss.item())
@@ -376,10 +367,8 @@ class Trainer:
                 scheduler_count += 1
                 if scheduler_count >= scheduler_steps:
                     print(f"\n --- Learning rate update --- \n")
-                    decoder_scheduler.step()
                     scheduler.step()
                     scheduler_count = 0
-
 
             avg_epoch_total_loss = total_epoch_loss / len(self.dataloaders)
             avg_epoch_content_loss = total_epoch_content_loss / len(self.dataloaders)
@@ -430,7 +419,7 @@ class Trainer:
 
             if avg_epoch_total_loss == min(loss_list) and self.save_best:
                 print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
-                self.save(transformer, transformer_optimizer, decoder, decoder_optimizer, info={"total": avg_epoch_total_loss,
+                self.save(transformer, transformer_optimizer, info={"total": avg_epoch_total_loss,
                                                                     "content": avg_epoch_content_loss,
                                                                     "style": avg_epoch_style_loss,
                                                                     "epoch": epoch,
@@ -438,7 +427,7 @@ class Trainer:
                                                                     }, result=plot)
             elif not self.save_best:
                 print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
-                self.save(transformer, transformer_optimizer, decoder, decoder_optimizer, info={"total": avg_epoch_total_loss,
+                self.save(transformer, transformer_optimizer, info={"total": avg_epoch_total_loss,
                                                                     "content": avg_epoch_content_loss,
                                                                     "style": avg_epoch_style_loss,
                                                                     "epoch": epoch,
@@ -453,7 +442,7 @@ class Trainer:
             self.wandb.finish()
 
     def save(self, transformer, transformer_optimizer,
-             decoder, decoder_optimizer, discriminator=None, info=None, result=None):
+                   discriminator=None, info=None, result=None):
         dir_name = f"TotalL_{info['total']}_Content_{info['content']}_Style_{info['style']}"
         save_path_dir = os.path.join(self.output_dir, dir_name)
         print(f" Saving in {save_path_dir}")
@@ -470,8 +459,6 @@ class Trainer:
             'epoch': info['epoch'],
             'model_state_dict': transformer.state_dict(),
             'optimizer_state_dict': transformer_optimizer.state_dict(),
-            'decoder_state_dict': decoder.state_dict(),
-            'decoder_optimizer_state_dict': decoder_optimizer.state_dict(),
             'loss': info['total'],
             'completed_step': info['completed_step'],
             "trans_size": self.transformer_size,
