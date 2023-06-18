@@ -1,6 +1,7 @@
 import os
 import random
 import warnings
+from typing import List, Dict
 
 import PIL.Image
 import torch
@@ -8,96 +9,122 @@ from PIL import Image, ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 PIL.Image.MAX_IMAGE_PIXELS = 933120000
 import torchvision.transforms as transforms
-from torch.utils.data import DataLoader, Dataset, RandomSampler
+from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 
 
 class STDataset(Dataset):
-    def __init__(self, content_urls: str, style_urls: str, transform=None):
+    def __init__(self, content_urls: str, style_urls: str,
+                 transform_content=None, transform_style=None,
+                 url_only: bool = False):
         self.content_urls = content_urls
         self.style_urls = style_urls
-        self.transform = transform
+        self.transform_content = transform_content
+        self.transform_style = transform_style
+        self.url_only = url_only
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.content_urls) if len(self.content_urls) < len(self.style_urls) else len(self.style_urls)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> Dict:
         content_url = self.content_urls[idx]
         style_url = self.style_urls[idx]
 
-        try:
-            content_image = Image.open(content_url).convert('RGB')
-            style_image = Image.open(style_url).convert('RGB')
-        except IOError:
-            warnings.warn("IO Error, watch out !")
-            raise "IO Error!"
+        if not self.url_only:
+            try:
+                content_image = Image.open(content_url).convert('RGB')
+                style_image = Image.open(style_url).convert('RGB')
+            except IOError:
+                warnings.warn("IO Error, watch out !")
+                raise "IO Error!"
 
-        if self.transform is not None:
-            content_image = self.transform(content_image)
-            style_image = self.transform(style_image)
+            if self.transform_content is not None:
+                content_image = self.transform_content(content_image)
+            if self.transform_style is not None:
+                style_image = self.transform_style(style_image)
 
-        return {'content_image': content_image,
-                'style_image': style_image}
+            return {'content_image': content_image,
+                    'style_image': style_image}
+        else:
+            return {'content_image': content_url,
+                    'style_image': style_url}
 
 
 class STDataloader:
     def __init__(self,
-                 content_datapath: str,
-                 style_datapath: str,
+                 content_datapath: List[str],
+                 style_datapath: List[str],
+                 eval_contentpath: str,
+                 eval_stylepath: str,
                  batch_size: int,
-                 transform,
+                 transform_content,
+                 transform_style,
                  max_style_train_samples: int,
                  max_content_train_samples: int,
-                 max_eval_samples: int,
-                 seed: int):
+                 eval_batch_size: int = 1,
+                 seed: int = 42,
+                 num_worker: int = 2):
         self.batch_size = batch_size
-        self.transform = transform
-        self.seed = seed
+        self.eval_batch_size = eval_batch_size
+        self.transform_content = transform_content
+        self.transform_style = transform_style
+
         self.max_style_train_samples = max_style_train_samples
         self.max_content_train_samples = max_content_train_samples
-        self.max_eval_samples = max_eval_samples
         self.content_datapath = content_datapath
         self.style_datapath = style_datapath
+        self.eval_contentpath = eval_contentpath
+        self.eval_stylepath = eval_stylepath
 
+        self.seed = seed
+        self.num_worker = num_worker
         self.generator = torch.Generator()
         self.generator.manual_seed(self.seed)
 
-    def __call__(self, *args, **kwargs):
+    @staticmethod
+    def get_img_path_list(dir_path) -> List[str]:
+        urls = []
+        path_list = os.listdir(dir_path)
+        for url in path_list:
+            if os.path.isfile(os.path.join(dir_path, url)):
+                extension = url.split(".")[-1]
+                assert extension in ["jpg"] or extension in ["png"], "non-image file found in dir."
+                urls.append(os.path.join(dir_path, url))
+            else:
+                warnings.warn("Non file found in data dir")
+                continue
+
+        return urls
+
+    def __call__(self, *args, **kwargs) -> Dict:
         # Only loading the image url to save on Ram
-
-        content_datapath_list = os.listdir(self.content_datapath)[:self.max_content_train_samples]
         content_image_urls = []
-        for url in content_datapath_list:
-            if os.path.isfile(os.path.join(self.content_datapath, url)):
-                extension = url.split(".")[-1]
-                assert extension in ["jpg"] or extension in ["png"], "non-image file found in dir."
-                content_image_urls.append(os.path.join(self.content_datapath, url))
-            else:
-                warnings.warn("Non file found in data dir")
-                continue
+        for path in self.content_datapath:
+            content_image_urls += self.get_img_path_list(path)
 
-        style_datapath_list = os.listdir(self.style_datapath)[:self.max_style_train_samples]
         style_image_urls = []
-        for url in style_datapath_list:
-            if os.path.isfile(os.path.join(self.style_datapath, url)):
-                extension = url.split(".")[-1]
-                assert extension in ["jpg"] or extension in ["png"], "non-image file found in dir."
-                style_image_urls.append(os.path.join(self.style_datapath, url))
-            else:
-                warnings.warn("Non file found in data dir")
-                continue
+        for path in self.style_datapath:
+            style_image_urls += self.get_img_path_list(path)
 
-        dataset = STDataset(content_image_urls, style_image_urls, transform=self.transform)
-        return self.get_dataloader(dataset, shuffle_flag=True)
+        content_eval_urls = self.get_img_path_list(self.eval_contentpath)
+        style_eval_urls = self.get_img_path_list(self.eval_stylepath)
 
-    def get_dataloader(self, dataset, shuffle_flag: bool = False):
+        train_dataset = STDataset(content_image_urls[:self.max_content_train_samples],
+                            style_image_urls[:self.max_style_train_samples],
+                            transform_content=self.transform_content, transform_style=self.transform_style)
 
+        eval_dataset = STDataset(content_eval_urls, style_eval_urls, url_only=True)
+
+        return {"train":self.get_dataloader(train_dataset, shuffle_flag=True, batch_size=self.batch_size),
+                "eval": self.get_dataloader(eval_dataset, shuffle_flag=False, batch_size=self.eval_batch_size)}
+
+    def get_dataloader(self, dataset, shuffle_flag: bool = False, batch_size: int = 1) -> DataLoader:
         sampler = RandomSampler(data_source=dataset, generator=self.generator) if shuffle_flag else \
             SequentialSampler(dataset)
         return DataLoader(dataset,
                           sampler=sampler,
-                          batch_size=self.batch_size,
+                          batch_size=batch_size,
                           drop_last=True,
-                          num_workers=2)
+                          num_workers=self.num_worker)
 
 
 if __name__ == "__main__":
