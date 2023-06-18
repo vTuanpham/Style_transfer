@@ -456,7 +456,8 @@ class Trainer:
                                                                     }, result=plots)
             else:
                 print(f"Discarding epoch [{epoch + 1}/{self.num_train_epochs}]")
-                plot.close('all')
+                if self.plot_per_epoch:
+                    plot.close('all')
                 continue
 
         if self.with_tracking:

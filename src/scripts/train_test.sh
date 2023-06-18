@@ -19,4 +19,5 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --CNN_layer_depth 2                           \
                    --deep_learner                                \
                    --step_frequency 0.3                          \
-                   --num_worker 2
+                   --num_worker 2                                \
+                   --do_eval_per_epoch
