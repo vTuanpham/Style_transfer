@@ -4,7 +4,6 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --batch_size 2                                \
                    --max_style_train_samples 15                  \
                    --max_content_train_samples 15                \
-                   --max_eval_samples 5                          \
                    --seed 42                                     \
                    --num_train_epochs 5                          \
                    --learning_rate 1e-4                          \

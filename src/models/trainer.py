@@ -302,14 +302,17 @@ class Trainer:
               f"\n Device to train: {self.device}\n")
 
         # Training loop
-        for epoch in tqdm(range(init_epoch, self.num_train_epochs), desc="Training progress",
-                          colour='green', position=0, leave=True, file=sys.stdout):
+
+        progress_bar = tqdm(range(init_epoch, self.num_train_epochs), desc="Training progress",
+                            colour='green', position=0, leave=True)
+
+        for epoch in progress_bar:
             total_epoch_loss, total_epoch_content_loss = 0, 0
             total_epoch_style_loss, total_epoch_var_loss = 0, 0
             total_epoch_hist_loss = 0
             transformer.train()
             for step, batch in enumerate(tqdm(self.dataloaders['train'], colour='blue', desc="Training batch progress",
-                                              position=1, leave=False, file=sys.stdout)):
+                                              position=1, leave=False)):
                 content_imgs = batch['content_image'].to(self.device)
                 style_imgs = batch['style_image'].to(self.device)
 
@@ -358,7 +361,11 @@ class Trainer:
                 total_epoch_hist_loss += float(histogram_loss.item())
 
                 if self.with_tracking:
-                    self.wandb.log({"Loss_content_contributed_batch": loss_content * self.alpha,
+                    rate = progress_bar.format_dict["rate"]
+                    remaining = (progress_bar.total - progress_bar.n) / rate if rate and progress_bar.total else 0
+                    self.wandb.log({"Elapsed(hours)": progress_bar.format_dict['elapsed'] / 60 / 60,
+                                    "Time_left(hours)": remaining / 60 / 60,
+                                    "Loss_content_contributed_batch": loss_content * self.alpha,
                                     "Loss_style_contributed_batch": loss_style * self.beta,
                                     "Loss_variation_contributed_batch": variation_loss * self.gamma,
                                     "Loss_histogram_contributed_batch": histogram_loss * self.delta,
