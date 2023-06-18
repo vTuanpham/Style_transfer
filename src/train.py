@@ -17,13 +17,16 @@ def parse_args(args):
                         help="The path to content images dir (can be a list of paths)")
     parser.add_argument('--style_datapath', nargs='+', type=str,
                         help="The path to style images dir (can be a list of paths)")
+    parser.add_argument('--eval_contentpath', type=str, default="./src/data/eval_dir/content",
+                        help="The path to eval dir")
+    parser.add_argument('--eval_stylepath', type=str, default="./src/data/eval_dir/style",
+                        help="The path to style dir")
     parser.add_argument('--batch_size', type=int, default=2, help="Batch size for the dataloader")
+    parser.add_argument('--eval_batch_size', type=int, default=1, help="Eval batch size for the dataloader")
     parser.add_argument('--max_content_train_samples', type=int, default=None, help="Number of content training samples")
     parser.add_argument('--max_style_train_samples', type=int, default=None, help="Number of style training samples")
-    parser.add_argument('--max_eval_samples', type=int, default=None, help="Number of validation samples")
+    parser.add_argument('--num_worker', type=int, default=2, help="Number of worker for dataloader")
     parser.add_argument('--seed', type=int, default=42, help="A seed for reproducible training.")
-    parser.add_argument('--width', type=int, default=300, help="Width of the image")
-    parser.add_argument('--height', type=int, default=300, help="Height of the image")
     parser.add_argument('--crop_width', type=int, default=256, help="Width of the image randomly center crop")
     parser.add_argument('--crop_height', type=int, default=256, help="Width of the image randomly center crop")
 
@@ -98,12 +101,14 @@ def parse_args(args):
 
 
 def main(args):
-
     args = parse_args(args)
     dataloader_args = {
         "content_datapath": args.content_datapath,
         "style_datapath": args.style_datapath,
+        "eval_contentpath": args.eval_contentpath,
+        "eval_stylepath": args.eval_stylepath,
         "batch_size": args.batch_size,
+        "eval_batch_size": args.eval_batch_size,
         "transform_content": transforms.Compose([
             transforms.CenterCrop((args.crop_width, args.crop_height)),
             transforms.ToTensor(),
@@ -122,8 +127,8 @@ def main(args):
         ]),
         "max_style_train_samples": args.max_style_train_samples,
         "max_content_train_samples": args.max_content_train_samples,
-        "max_eval_samples": args.max_eval_samples,
-        "seed": args.seed
+        "seed": args.seed,
+        "num_worker": args.num_worker
     }
     dataloaders = STDataloader(**dataloader_args)
 

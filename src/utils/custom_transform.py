@@ -76,7 +76,7 @@ if __name__ == "__main__":
     ])
 
     # Convert PIL image to tensor and add noise
-    noisy_img_tensor = transform(img)
+    noisy_img_tensor = transform(img).squeeze().permute(1, 2, 0)
 
     # Plot the noisy image
     plt.imshow(noisy_img_tensor)

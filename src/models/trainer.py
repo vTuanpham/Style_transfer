@@ -43,7 +43,6 @@ class Trainer:
                  weight_decay,
                  per_device_batch_size: int,
                  gradient_accumulation_steps: int,
-                 do_eval_per_epoch: bool,
                  learning_rate: float,
                  alpha: float,
                  beta: float,
@@ -51,6 +50,7 @@ class Trainer:
                  login_key: str,
                  seed: int = 42,
                  warm_up_epoch: int = 1,
+                 do_eval_per_epoch: bool = True,
                  plot_per_epoch: bool = False,
                  save_best: bool = True,
                  resume_from_checkpoint: str = None,
@@ -62,8 +62,8 @@ class Trainer:
                  transformer_size: int = 32,
                  layer_depth: int = 1,
                  deep_learner: bool = False,
-                 content_layers_idx: List[int] = [11, 17, 22, 26],
-                 style_layers_idx: List[int] = [1, 3, 6, 8, 9, 11]
+                 content_layers_idx: List[int] = [12, 16, 21],
+                 style_layers_idx: List[int] = [0, 5, 10, 19, 28]
                  ):
 
         self.output_dir = output_dir
@@ -90,6 +90,7 @@ class Trainer:
         self.deep_learner = deep_learner
         self.warm_up_epoch = warm_up_epoch
         self.step_frequency = step_frequency
+        self.do_eval_per_epoch = do_eval_per_epoch
 
         set_seed(seed)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -125,8 +126,8 @@ class Trainer:
                         "deep_learner": self.deep_learner,
                         "transformer_size": self.transformer_size,
                         "step_frequency": self.step_frequency,
-                        "num_batch": len(self.dataloaders),
-                        "num_exampes": len(self.dataloaders.dataset)
+                        "num_batch": len(self.dataloaders['train']),
+                        "num_exampes": len(self.dataloaders['train'].dataset)
                         }
                 )
                 if self.log_weights_cpkt:
@@ -280,8 +281,8 @@ class Trainer:
                 pass
 
         # Calculate how often should we update the lr
-        total_steps = len(self.dataloaders) * (self.num_train_epochs-init_epoch)
-        steps_per_epoch = len(self.dataloaders)
+        total_steps = len(self.dataloaders['train']) * (self.num_train_epochs-init_epoch)
+        steps_per_epoch = len(self.dataloaders['train'])
         scheduler_steps = math.ceil(steps_per_epoch *  self.step_frequency)
         scheduler_count = 0
 
@@ -289,8 +290,8 @@ class Trainer:
         print(f"\n Number of epoch: {self.num_train_epochs}"
               f"\n Init epoch: {init_epoch}"
               f"\n Batch size: {self.per_device_batch_size}"
-              f"\n Total number of batch: {len(self.dataloaders)}"
-              f"\n Total number of examples: {len(self.dataloaders.dataset)}"
+              f"\n Total number of batch: {len(self.dataloaders['train'])}"
+              f"\n Total number of examples: {len(self.dataloaders['train'].dataset)}"
               f"\n Total number of steps: {total_steps}"
               f"\n Number of steps before updating the lr: {scheduler_steps}"
               f"\n Transformation matrix size: {self.transformer_size}"
@@ -307,7 +308,7 @@ class Trainer:
             total_epoch_style_loss, total_epoch_var_loss = 0, 0
             total_epoch_hist_loss = 0
             transformer.train()
-            for step, batch in enumerate(tqdm(self.dataloaders, colour='blue', desc="Training batch progress",
+            for step, batch in enumerate(tqdm(self.dataloaders['train'], colour='blue', desc="Training batch progress",
                                               position=1, leave=False, file=sys.stdout)):
                 content_imgs = batch['content_image'].to(self.device)
                 style_imgs = batch['style_image'].to(self.device)
@@ -370,11 +371,11 @@ class Trainer:
                     scheduler.step()
                     scheduler_count = 0
 
-            avg_epoch_total_loss = total_epoch_loss / len(self.dataloaders)
-            avg_epoch_content_loss = total_epoch_content_loss / len(self.dataloaders)
-            avg_epoch_style_loss = total_epoch_style_loss / len(self.dataloaders)
-            avg_epoch_var_loss = total_epoch_var_loss / len(self.dataloaders)
-            avg_epoch_hist_loss = total_epoch_hist_loss / len(self.dataloaders)
+            avg_epoch_total_loss = total_epoch_loss / len(self.dataloaders['train'])
+            avg_epoch_content_loss = total_epoch_content_loss / len(self.dataloaders['train'])
+            avg_epoch_style_loss = total_epoch_style_loss / len(self.dataloaders['train'])
+            avg_epoch_var_loss = total_epoch_var_loss / len(self.dataloaders['train'])
+            avg_epoch_hist_loss = total_epoch_hist_loss / len(self.dataloaders['train'])
 
             loss_list.append(avg_epoch_total_loss)
             # Print the loss for monitoring
@@ -389,12 +390,36 @@ class Trainer:
 
             if self.plot_per_epoch:
                 print(f"\n Plotting comparison of epoch [{epoch + 1}/{self.num_train_epochs}]... \n")
-            plot = self.plot_comparison(encoder, decoder, transformer,
-                                         r"./src/data/dummy/content/im1.jpg", r"./src/data/dummy/style/85343.jpg",
-                                         transforms.Compose([
-                                             transforms.Resize(256),
-                                             transforms.ToTensor()
-                                         ]), self.device, plot=self.plot_per_epoch)
+            plots = None
+            if self.do_eval_per_epoch:
+                plots = []
+                for step, batch in enumerate(tqdm(self.dataloaders['eval'], colour='red',
+                                                  desc="Evaluating progress", position=2, leave=False)):
+                    content_img_paths = batch['content_image']
+                    style_img_paths = batch['style_image']
+                    plot = self.plot_comparison(encoder, decoder, transformer,
+                                                 content_img_paths, style_img_paths,
+                                                 transforms.Compose([
+                                                     transforms.Resize(256),
+                                                     transforms.ToTensor()
+                                                 ]), self.device, plot=self.plot_per_epoch)
+                    try:
+                        try:
+                            io_buf = io.BytesIO()
+                            plot.savefig(io_buf, format='raw')
+                            io_buf.seek(0)
+                            plots.append(Image.frombytes('RGBA', (1000, 400), io_buf.getvalue(), 'raw'))
+                            io_buf.close()
+                        except Exception:
+                            warnings.warn("Byte IO fail!")
+                            pass
+                        if self.with_tracking:
+                            comparison_plot = [wandb.Image(image, caption=f"Comparison of epoch {epoch} sample {idx}")
+                                           for idx, image in enumerate(plots)]
+                            self.wandb.log({"Examples": comparison_plot}, step=completed_step)
+                    except Exception:
+                        warnings.warn("Unable to log examples to wandb!")
+                        pass
 
             if self.with_tracking:
                 print("--- Logging to wandb ---")
@@ -405,17 +430,6 @@ class Trainer:
                                 "Loss_histogram_contributed": avg_epoch_hist_loss*self.delta,
                                 "Total_loss": avg_epoch_total_loss,
                                 "Min_loss": min(loss_list)}, step=completed_step)
-                try:
-                    io_buf = io.BytesIO()
-                    plot.savefig(io_buf, format='raw')
-                    io_buf.seek(0)
-                    comparison_plot = wandb.Image(Image.frombytes('RGBA', (1000, 400), io_buf.getvalue(), 'raw'),
-                                                  caption=f"Comparison of epoch {epoch}")
-                    io_buf.close()
-                    self.wandb.log({"Examples": comparison_plot}, step=completed_step)
-                except Exception:
-                    warnings.warn("Unable to log examples to wandb")
-                    pass
 
             if avg_epoch_total_loss == min(loss_list) and self.save_best:
                 print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
@@ -424,7 +438,7 @@ class Trainer:
                                                                     "style": avg_epoch_style_loss,
                                                                     "epoch": epoch,
                                                                     "completed_step": completed_step
-                                                                    }, result=plot)
+                                                                    }, result=plots)
             elif not self.save_best:
                 print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
                 self.save(transformer, transformer_optimizer, info={"total": avg_epoch_total_loss,
@@ -432,7 +446,7 @@ class Trainer:
                                                                     "style": avg_epoch_style_loss,
                                                                     "epoch": epoch,
                                                                     "completed_step": completed_step
-                                                                    }, result=plot)
+                                                                    }, result=plots)
             else:
                 print(f"Discarding epoch [{epoch + 1}/{self.num_train_epochs}]")
                 plot.close('all')
@@ -441,8 +455,7 @@ class Trainer:
         if self.with_tracking:
             self.wandb.finish()
 
-    def save(self, transformer, transformer_optimizer,
-                   discriminator=None, info=None, result=None):
+    def save(self, transformer, transformer_optimizer, info=None, result=None):
         dir_name = f"TotalL_{info['total']}_Content_{info['content']}_Style_{info['style']}"
         save_path_dir = os.path.join(self.output_dir, dir_name)
         print(f" Saving in {save_path_dir}")
@@ -452,8 +465,7 @@ class Trainer:
             warnings.warn("File exist!, might be a good idea to change seed")
             raise FileExistsError
 
-        model_path = os.path.join(save_path_dir, f"transformer{len(self.dataloaders.dataset)}" + ".pth")
-        plot_path = os.path.join(save_path_dir, "result_plot.png")
+        model_path = os.path.join(save_path_dir, f"transformer{len(self.dataloaders['train'].dataset)}" + ".pth")
         # Save weights at output dir
         torch.save({
             'epoch': info['epoch'],
@@ -473,7 +485,11 @@ class Trainer:
                 "style_layers_idx": self.style_layers_idx
             }
         }, model_path)
-        result.savefig(plot_path)
+
+        if result is not None:
+            for idx, plot in enumerate(result):
+                plot_path = os.path.join(save_path_dir, f"result_plot{idx}.png")
+                plot.save(plot_path)
 
         if self.with_tracking and self.log_weights_cpkt:
             print(f" --- Saving {PRJ_NAME} checkpoint to wandb ---")
@@ -490,16 +506,13 @@ class Trainer:
                 except Exception:
                     raise "Unable to creating or initializing artifact to log cpkt!"
 
-        if discriminator is not None:
-            model_path = os.path.join(self.output_dir, "discriminator" + ".pth")
-            torch.save(discriminator.state_dict(), model_path)
-
     @staticmethod
     def plot_comparison(encoder, decoder, transformer, content_img_url, style_img_url,
                         transformation, device, sleep: int = 5, plot: bool = True):
         try:
-            content_image = Image.open(content_img_url).convert('RGB')
-            style_image = Image.open(style_img_url).convert('RGB')
+            for content_url, style_url in zip(content_img_url, style_img_url):
+                content_image = Image.open(content_url).convert('RGB')
+                style_image = Image.open(style_url).convert('RGB')
         except IOError:
             raise "Invalid image url!"
 
