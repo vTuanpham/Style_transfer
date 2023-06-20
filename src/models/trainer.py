@@ -186,16 +186,18 @@ class Trainer:
         for feature in content_features:
             loss = self.content_loss(feature['model_output'], feature['orginal'])
             losses.append(loss)
-        loss_content_weightAdjust = map(lambda loss: loss*(1/(len(losses))), losses)
-        loss_content = sum(loss_content_weightAdjust)
+        # loss_content_weightAdjust = map(lambda loss: loss*(1/(len(losses))), losses)
+        # loss_content = sum(loss_content_weightAdjust)
+        loss_content = sum(losses)
 
         # Compute style loss
         losses = []
         for feature in style_features:
             loss = self.style_loss(feature['model_output'], feature['orginal'])
             losses.append(loss)
-        loss_style_weightAdjust = map(lambda loss: loss*(1/(len(losses))), losses)
-        loss_style = sum(loss_style_weightAdjust)
+        # loss_style_weightAdjust = map(lambda loss: loss*(1/(len(losses))), losses)
+        # loss_style = sum(loss_style_weightAdjust)
+        loss_style = sum(losses)
 
         # Compute variation loss
         variation_loss = self.variation_loss(stylized_outputs)
@@ -414,6 +416,7 @@ class Trainer:
                         try:
                             io_buf = io.BytesIO()
                             plot.savefig(io_buf, format='raw')
+                            plot.close('all')
                             io_buf.seek(0)
                             plots.append(Image.frombytes('RGBA', (1000, 400), io_buf.getvalue(), 'raw'))
                             io_buf.close()
