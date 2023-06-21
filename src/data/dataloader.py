@@ -87,8 +87,10 @@ class STDataloader:
         for url in path_list:
             if os.path.isfile(os.path.join(dir_path, url)):
                 extension = url.split(".")[-1]
-                assert extension in ["jpg"] or extension in ["png"], "non-image file found in dir."
-                urls.append(os.path.join(dir_path, url))
+                if extension in ["jpg"] or extension in ["png"]:
+                    urls.append(os.path.join(dir_path, url))
+                    continue
+                warnings.warn("non-image file found in dir.")
             else:
                 warnings.warn("Non file found in data dir")
                 continue
