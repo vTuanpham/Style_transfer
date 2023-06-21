@@ -46,8 +46,8 @@ class TVLoss(nn.Module):
         count_w = self._tensor_size(image[:, :, :, 1:])
         h_tv = torch.pow((image[:, :, 1:, :] - image[:, :, :height - 1, :]), 2).div(count_h)
         w_tv = torch.pow((image[:, :, :, 1:] - image[:, :, :, :width - 1]), 2).div(count_w)
-        tv_loss = torch.sum(h_tv) + torch.sum(w_tv)
-        return 2 * tv_loss / batch_size
+        tv_loss = torch.pow(torch.sum(h_tv) + torch.sum(w_tv), 10)
+        return (2 * tv_loss / batch_size)*100
 
     @staticmethod
     def _tensor_size(t):
@@ -281,7 +281,7 @@ class HistLoss(nn.Module):
                           (torch.sqrt(torch.sum(torch.pow(torch.sqrt(target_hist) -
                                                 torch.sqrt(input_hist), 2)))) /input_hist.shape[0])
 
-        return histogram_loss
+        return histogram_loss*100
 
 
 if __name__=="__main__":

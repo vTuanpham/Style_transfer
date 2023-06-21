@@ -22,5 +22,6 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --log_weights_cpkt                            \
                    --step_frequency 0.5                          \
                    --num_worker 4                                \
-                   --do_eval_per_epoch
+                   --do_eval_per_epoch                           \
+                   --deep_dense
 

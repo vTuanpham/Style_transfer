@@ -62,6 +62,7 @@ class Trainer:
                  transformer_size: int = 32,
                  layer_depth: int = 1,
                  deep_learner: bool = False,
+                 deep_dense: bool = False,
                  content_layers_idx: List[int] = [12, 16, 21],
                  style_layers_idx: List[int] = [0, 5, 10, 19, 28]
                  ):
@@ -88,6 +89,7 @@ class Trainer:
         self.transformer_size = transformer_size
         self.layer_depth = layer_depth
         self.deep_learner = deep_learner
+        self.deep_dense = deep_dense
         self.warm_up_epoch = warm_up_epoch
         self.step_frequency = step_frequency
         self.do_eval_per_epoch = do_eval_per_epoch
@@ -173,7 +175,9 @@ class Trainer:
         decoder = Decoder().eval().to(self.device)
 
         transformer = MTranspose(matrix_size=self.transformer_size,
-                                 layer_depth=self.layer_depth, deep_learner=self.deep_learner).to(self.device)
+                                 layer_depth=self.layer_depth,
+                                 deep_learner=self.deep_learner,
+                                 deep_dense=self.deep_dense).to(self.device)
 
         content_extractors = self.get_feature_extractor(self.content_layers_idx, device=self.device)
         style_extractors = self.get_feature_extractor(self.style_layers_idx, device=self.device)
@@ -186,16 +190,18 @@ class Trainer:
         for feature in content_features:
             loss = self.content_loss(feature['model_output'], feature['orginal'])
             losses.append(loss)
-        loss_content_weightAdjust = map(lambda loss: loss*(1/(len(losses))), losses)
-        loss_content = sum(loss_content_weightAdjust)
+        # loss_content_weightAdjust = map(lambda loss: loss*(1/(len(losses))), losses)
+        # loss_content = sum(loss_content_weightAdjust)
+        loss_content = sum(losses)
 
         # Compute style loss
         losses = []
         for feature in style_features:
             loss = self.style_loss(feature['model_output'], feature['orginal'])
             losses.append(loss)
-        loss_style_weightAdjust = map(lambda loss: loss*(1/(len(losses))), losses)
-        loss_style = sum(loss_style_weightAdjust)
+        # loss_style_weightAdjust = map(lambda loss: loss*(1/(len(losses))), losses)
+        # loss_style = sum(loss_style_weightAdjust)
+        loss_style = sum(losses)
 
         # Compute variation loss
         variation_loss = self.variation_loss(stylized_outputs)
@@ -407,13 +413,14 @@ class Trainer:
                     plot = self.plot_comparison(encoder, decoder, transformer,
                                                  content_img_paths, style_img_paths,
                                                  transforms.Compose([
-                                                     transforms.Resize(256),
+                                                     transforms.Resize(300),
                                                      transforms.ToTensor()
                                                  ]), self.device, plot=self.plot_per_epoch)
                     try:
                         try:
                             io_buf = io.BytesIO()
                             plot.savefig(io_buf, format='raw')
+                            plot.close('all')
                             io_buf.seek(0)
                             plots.append(Image.frombytes('RGBA', (1000, 400), io_buf.getvalue(), 'raw'))
                             io_buf.close()
