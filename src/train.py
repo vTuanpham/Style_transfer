@@ -54,6 +54,8 @@ def parse_args(args):
                         help="Depth of CNN layer")
     parser.add_argument('--deep_learner', action='store_true',
                         help="Whether to enable deepest layer for abstract learning.")
+    parser.add_argument('--deep_dense', action='store_true',
+                        help="Whether to enable deepest dense layer for bottleneck")
 
     # Optimizer
     parser.add_argument('--vgg_model_type', type=str, default='19',help=(
@@ -110,7 +112,7 @@ def main(args):
         "batch_size": args.batch_size,
         "eval_batch_size": args.eval_batch_size,
         "transform_content": transforms.Compose([
-            transforms.CenterCrop((args.crop_width, args.crop_height)),
+            transforms.RandomCrop((args.crop_width, args.crop_height), pad_if_needed=True, padding=1),
             transforms.ToTensor(),
             RGBToGrayscaleStacked(),
             transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.5),
@@ -118,7 +120,7 @@ def main(args):
             transforms.RandomHorizontalFlip(p=0.5)
         ]),
         "transform_style": transforms.Compose([
-            transforms.CenterCrop((args.crop_width, args.crop_height)),
+            transforms.RandomCrop((args.crop_width, args.crop_height), pad_if_needed=True, padding=1),
             transforms.ToTensor(),
             AddGaussianNoise(mean=0.5, sigma_range=(0., 0.08), p=0.5),
             transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.5),
@@ -149,6 +151,7 @@ def main(args):
         "transformer_size": args.transformer_size,
         "layer_depth": args.CNN_layer_depth,
         "deep_learner": args.deep_learner,
+        "deep_dense": args.deep_dense,
         "login_key": args.login_key,
         "seed": args.seed,
         "alpha": args.alpha,
