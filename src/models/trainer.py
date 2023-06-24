@@ -23,7 +23,7 @@ from typing import List
 from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 
-from src.models.losses import StyleLoss, TVLoss, HistLoss
+from src.models.losses import VincentStyleLossToTarget, TVLoss, HistLoss
 from torch.nn import MSELoss as ContentLoss
 
 from src.models.generator import Encoder, Decoder
@@ -55,11 +55,13 @@ class Trainer:
                  save_best: bool = True,
                  resume_from_checkpoint: str = None,
                  vgg_model_type: str = '19',
+                 optim_name: str = 'adam',
                  with_tracking: bool = False,
                  log_weights_cpkt: bool = False,
                  delta: float = 2,
                  step_frequency: float = 0.5,
                  transformer_size: int = 32,
+                 gradient_threshold: float = None,
                  layer_depth: int = 1,
                  deep_learner: bool = False,
                  deep_dense: bool = False,
@@ -93,12 +95,15 @@ class Trainer:
         self.warm_up_epoch = warm_up_epoch
         self.step_frequency = step_frequency
         self.do_eval_per_epoch = do_eval_per_epoch
+        self.optim_name = optim_name
+        self.gradient_threshold = gradient_threshold
 
         set_seed(seed)
+        self.seed = seed
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self.variation_loss = TVLoss()
-        self.style_loss = StyleLoss()
+        self.style_loss = VincentStyleLossToTarget()
         self.content_loss = ContentLoss()
         self.hist_loss = HistLoss()
 
@@ -126,10 +131,16 @@ class Trainer:
                         "batch_size": self.per_device_batch_size,
                         "layer_depth": self.layer_depth,
                         "deep_learner": self.deep_learner,
+                        "deep_dense": self.deep_dense,
                         "transformer_size": self.transformer_size,
                         "step_frequency": self.step_frequency,
                         "num_batch": len(self.dataloaders['train']),
-                        "num_exampes": len(self.dataloaders['train'].dataset)
+                        "num_exampes": len(self.dataloaders['train'].dataset),
+                        "gradient_threshold": self.gradient_threshold,
+                        "optim_name": self.optim_name,
+                        "step_frequency": self.step_frequency,
+                        "seed": self.seed,
+                        "warmup_epochs": self.warm_up_epoch
                         }
                 )
                 if self.log_weights_cpkt:
@@ -169,6 +180,33 @@ class Trainer:
 
         feature_extractors = IntermediateLayerGetter(vgg, return_layers=selected_layers).to(device)
         return feature_extractors
+
+    @staticmethod
+    def get_optimizer(optimizer_name: str, parameters, **kwargs):
+        optimizer_name = optimizer_name.lower()
+
+        if optimizer_name == 'sgd':
+            return optim.SGD(parameters, **kwargs)
+        elif optimizer_name == 'adam':
+            return optim.Adam(parameters, **kwargs)
+        elif optimizer_name == 'rmsprop':
+            return optim.RMSprop(parameters, **kwargs)
+        elif optimizer_name == 'adagrad':
+            return optim.Adagrad(parameters, **kwargs)
+        elif optimizer_name == 'adadelta':
+            return optim.Adadelta(parameters, **kwargs)
+        elif optimizer_name == 'adamw':
+            return optim.AdamW(parameters, **kwargs)
+        elif optimizer_name == 'adamax':
+            return optim.Adamax(parameters, **kwargs)
+        elif optimizer_name == 'sparseadam':
+            return optim.SparseAdam(parameters, **kwargs)
+        elif optimizer_name == 'lbfgs':
+            return optim.LBFGS(parameters, **kwargs)
+        elif optimizer_name == 'rprop':
+            return optim.Rprop(parameters, **kwargs)
+        else:
+            raise ValueError(f"Optimizer '{optimizer_name}' not supported.")
 
     def build_model(self):
         encoder = Encoder().eval().to(self.device)
@@ -221,7 +259,7 @@ class Trainer:
         encoder, decoder, transformer, content_extractors, style_extractors = self.build_model()
 
         # Define the optimizer
-        transformer_optimizer = optim.Adam(transformer.parameters(), lr=self.learning_rate)
+        transformer_optimizer = self.get_optimizer(self.optim_name, transformer.parameters(), lr=self.learning_rate)
 
         # Define the learning rate scheduler
         def lr_lambda(epoch, warm_up_epoch):
@@ -232,6 +270,8 @@ class Trainer:
 
         scheduler = lr_scheduler.LambdaLR(transformer_optimizer,
                                           lr_lambda=lambda epoch: lr_lambda(epoch, self.warm_up_epoch))
+
+        norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
         init_epoch = 0
         loss_list = []
@@ -252,7 +292,15 @@ class Trainer:
 
             print(f"\n Loading optimizer...")
             try:
-                transformer_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                if self.optim_name == checkpoint['optim_name']:
+                    transformer_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                else:
+                    transformer_optimizer = self.get_optimizer(checkpoint['optim_name'],
+                                                               transformer.parameters(), lr=self.learning_rate)
+                    transformer_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                    warnings.warn(f"Set optim {self.optim_name} different from checkpoint optim {checkpoint['optim_name']},"
+                                  f" switching to {checkpoint['optim_name']}")
+                    self.optim_name = checkpoint['optim_name']
             except Exception:
                 raise "Unable to load optimizer state!"
 
@@ -289,11 +337,13 @@ class Trainer:
         # Calculate how often should we update the lr
         total_steps = len(self.dataloaders['train']) * (self.num_train_epochs-init_epoch)
         steps_per_epoch = len(self.dataloaders['train'])
-        scheduler_steps = math.ceil(steps_per_epoch *  self.step_frequency)
+        scheduler_steps = math.ceil(steps_per_epoch * self.step_frequency)
         scheduler_count = 0
 
         print(f"\n --- Training init log --- \n")
         print(f"\n Number of epoch: {self.num_train_epochs}"
+              f"\n Optim name: {self.optim_name}"
+              f"\n Gradient threshold: {self.gradient_threshold}"
               f"\n Init epoch: {init_epoch}"
               f"\n Batch size: {self.per_device_batch_size}"
               f"\n Total number of batch: {len(self.dataloaders['train'])}"
@@ -331,6 +381,11 @@ class Trainer:
                 # Decode features
                 decode_imgs = decoder(transformed_features)
 
+                # Normalize
+                content_imgs = norm(content_imgs)
+                style_imgs = norm(style_imgs)
+                decode_imgs = norm(decode_imgs)
+
                 # Extract features from VGG19 for content and style images
                 content_features = []
                 org_output_features = list(content_extractors(content_imgs).values())
@@ -357,6 +412,10 @@ class Trainer:
                 # Backpropagation and optimization
                 transformer_optimizer.zero_grad()
                 total_loss.backward()
+
+                if self.gradient_threshold is not None:
+                    nn.utils.clip_grad_norm_(transformer.parameters(), max_norm=self.gradient_threshold)
+
                 transformer_optimizer.step()
 
                 completed_step += step
@@ -437,7 +496,7 @@ class Trainer:
 
             if self.with_tracking:
                 print("--- Logging to wandb ---")
-                self.wandb.log({"Epoch": epoch,
+                self.wandb.log({"Epoch": epoch+1,
                                 "Loss_content_contributed": avg_epoch_content_loss*self.alpha,
                                 "Loss_style_contributed": avg_epoch_style_loss*self.beta,
                                 "Loss_variation_contributed": avg_epoch_var_loss*self.gamma,
@@ -486,6 +545,7 @@ class Trainer:
             'epoch': info['epoch'],
             'model_state_dict': transformer.state_dict(),
             'optimizer_state_dict': transformer_optimizer.state_dict(),
+            "optim_name": self.optim_name,
             'loss': info['total'],
             'completed_step': info['completed_step'],
             "trans_size": self.transformer_size,

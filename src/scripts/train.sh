@@ -23,5 +23,7 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --step_frequency 0.5                          \
                    --num_worker 4                                \
                    --do_eval_per_epoch                           \
-                   --deep_dense
+                   --deep_dense                                  \
+                   --optim_name adam                             \
+                   --gradient_threshold 20
 

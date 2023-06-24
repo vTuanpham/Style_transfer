@@ -114,7 +114,7 @@ class STDataloader:
                             style_image_urls[:self.max_style_train_samples],
                             transform_content=self.transform_content, transform_style=self.transform_style)
 
-        eval_dataset = STDataset(content_eval_urls, style_eval_urls, url_only=True)
+        eval_dataset = STDataset(sorted(content_eval_urls), sorted(style_eval_urls), url_only=True)
 
         return {"train":self.get_dataloader(train_dataset, shuffle_flag=True, batch_size=self.batch_size),
                 "eval": self.get_dataloader(eval_dataset, shuffle_flag=False, batch_size=self.eval_batch_size)}
