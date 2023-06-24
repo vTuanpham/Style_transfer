@@ -221,7 +221,8 @@ class Trainer:
         encoder, decoder, transformer, content_extractors, style_extractors = self.build_model()
 
         # Define the optimizer
-        transformer_optimizer = optim.Adam(transformer.parameters(), lr=self.learning_rate)
+        transformer_optimizer = optim.RMSprop(transformer.parameters(), lr=self.learning_rate)
+        # transformer_optimizer = optim.Adam(transformer.parameters(), lr=self.learning_rate)
 
         # Define the learning rate scheduler
         def lr_lambda(epoch, warm_up_epoch):
