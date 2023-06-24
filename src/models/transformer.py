@@ -101,9 +101,8 @@ class FFExtractor(nn.Module):
         out = x
         for idx, layer in enumerate(range(self.layer_depth)):
             out = self.cnn_block_deep(out)
-            if idx % 5 == 0:
-                out = out.clone() + x
-
+            # if idx % 10 == 0:
+            #     out = out.clone() + x
         out = out.clone() + x
         if self.deep_learner:
             out = self.cnn_block_super_deep_transition(out)

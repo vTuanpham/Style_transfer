@@ -61,8 +61,13 @@ def parse_args(args):
     parser.add_argument('--vgg_model_type', type=str, default='19',help=(
             "Which models of the vgg to use as a feature extractor"
         ))
+    parser.add_argument('--optim_name', type=str, default='adam', help=(
+            "Which optimizer to use"
+        ))
     parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help="Initial learning rate (after the potential warmup period) to use.")
+    parser.add_argument('--gradient_threshold', type=float, default=None,
+                        help="Gradient threshold for clipping (use for exploding gradient)")
     parser.add_argument('--warm_up_epoch', type=int, default=1,
                         help="Warmup period")
     parser.add_argument('--alpha', type=float, default=5e-5,
@@ -104,6 +109,7 @@ def parse_args(args):
 
 def main(args):
     args = parse_args(args)
+
     dataloader_args = {
         "content_datapath": args.content_datapath,
         "style_datapath": args.style_datapath,
@@ -161,7 +167,9 @@ def main(args):
         "content_layers_idx": args.content_layers_idx,
         "style_layers_idx": args.style_layers_idx,
         "log_weights_cpkt": args.log_weights_cpkt,
-        "step_frequency": args.step_frequency
+        "step_frequency": args.step_frequency,
+        "optim_name": args.optim_name,
+        "gradient_threshold": args.gradient_threshold
     }
     trainer = Trainer(**trainer_args)
     trainer.train()
