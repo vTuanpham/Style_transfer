@@ -54,13 +54,20 @@ def parse_args(args):
                         help="Depth of CNN layer")
     parser.add_argument('--deep_learner', action='store_true',
                         help="Whether to enable deepest layer for abstract learning.")
+    parser.add_argument('--deep_dense', action='store_true',
+                        help="Whether to enable deepest dense layer for bottleneck")
 
     # Optimizer
     parser.add_argument('--vgg_model_type', type=str, default='19',help=(
             "Which models of the vgg to use as a feature extractor"
         ))
+    parser.add_argument('--optim_name', type=str, default='adam', help=(
+            "Which optimizer to use"
+        ))
     parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help="Initial learning rate (after the potential warmup period) to use.")
+    parser.add_argument('--gradient_threshold', type=float, default=None,
+                        help="Gradient threshold for clipping (use for exploding gradient)")
     parser.add_argument('--warm_up_epoch', type=int, default=1,
                         help="Warmup period")
     parser.add_argument('--alpha', type=float, default=5e-5,
@@ -102,6 +109,7 @@ def parse_args(args):
 
 def main(args):
     args = parse_args(args)
+
     dataloader_args = {
         "content_datapath": args.content_datapath,
         "style_datapath": args.style_datapath,
@@ -110,7 +118,7 @@ def main(args):
         "batch_size": args.batch_size,
         "eval_batch_size": args.eval_batch_size,
         "transform_content": transforms.Compose([
-            transforms.CenterCrop((args.crop_width, args.crop_height)),
+            transforms.RandomCrop((args.crop_width, args.crop_height), pad_if_needed=True, padding=1),
             transforms.ToTensor(),
             RGBToGrayscaleStacked(),
             transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.5),
@@ -118,7 +126,7 @@ def main(args):
             transforms.RandomHorizontalFlip(p=0.5)
         ]),
         "transform_style": transforms.Compose([
-            transforms.CenterCrop((args.crop_width, args.crop_height)),
+            transforms.RandomCrop((args.crop_width, args.crop_height), pad_if_needed=True, padding=1),
             transforms.ToTensor(),
             AddGaussianNoise(mean=0.5, sigma_range=(0., 0.08), p=0.5),
             transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.5),
@@ -149,6 +157,7 @@ def main(args):
         "transformer_size": args.transformer_size,
         "layer_depth": args.CNN_layer_depth,
         "deep_learner": args.deep_learner,
+        "deep_dense": args.deep_dense,
         "login_key": args.login_key,
         "seed": args.seed,
         "alpha": args.alpha,
@@ -158,7 +167,9 @@ def main(args):
         "content_layers_idx": args.content_layers_idx,
         "style_layers_idx": args.style_layers_idx,
         "log_weights_cpkt": args.log_weights_cpkt,
-        "step_frequency": args.step_frequency
+        "step_frequency": args.step_frequency,
+        "optim_name": args.optim_name,
+        "gradient_threshold": args.gradient_threshold
     }
     trainer = Trainer(**trainer_args)
     trainer.train()

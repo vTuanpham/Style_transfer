@@ -8,35 +8,53 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 
 
-class GramMatrix(nn.Module):
-    def forward(self, input):
-        b, c, h, w = input.size()
-        f = input.view(b,c,h*w) # bxcx(hxw)
-        # torch.bmm(batch1, batch2, out=None)   #
-        # batch1: bxmxp, batch2: bxpxn -> bxmxn #
-        G = torch.bmm(f,f.transpose(1,2)) # f: bxcx(hxw), f.transpose: bx(hxw)xc -> bxcxc
-        return G.div_(c*h*w)
+class VincentStyleLossToTarget(nn.Module):
+    def __init__(self, scale_factor=1e-3):
+        super(VincentStyleLossToTarget, self).__init__()
+        self.scale_factor = scale_factor  # Defaults tend to be very large, we scale to make them easier to work with
 
+    @staticmethod
+    def calc_2_moments(x):
+        b, c, w, h = x.shape
+        x = x.reshape(b, c, w * h)  # b, c, n
+        mu = x.mean(dim=-1, keepdim=True)  # b, c, 1
+        cov = torch.bmm(x - mu, torch.transpose(x - mu, -1, -2))
+        return mu, cov
 
-class StyleLoss(nn.Module):
-    def __init__(self):
-        super(StyleLoss, self).__init__()
-        self.G = GramMatrix()
-        self.mse_loss = nn.MSELoss(size_average=False)
+    @staticmethod
+    def matrix_diag(diagonal):
+        N = diagonal.shape[-1]
+        shape = diagonal.shape[:-1] + (N, N)
+        device, dtype = diagonal.device, diagonal.dtype
+        result = torch.zeros(shape, dtype=dtype, device=device)
+        indices = torch.arange(result.numel(), device=device).reshape(shape)
+        indices = indices.diagonal(dim1=-2, dim2=-1)
+        result.view(-1)[indices] = diagonal
+        return result
 
-    def forward(self, input, target):
-        ib,ic,ih,iw = input.size()
-        iF = input.view(ib,ic,-1)
-        iMean = torch.mean(iF,dim=2)
-        iCov = self.G(input)
+    def l2wass_dist(self, mean_stl, cov_stl, mean_synth, cov_synth):
+        # Calculate tr_cov and root_cov from mean_stl and cov_stl
+        eigvals, eigvects = torch.linalg.eigh(
+            cov_stl)  # eig returns complex tensors, I think eigh matches tf self_adjoint_eig
+        eigroot_mat = self.matrix_diag(torch.sqrt(eigvals.clip(0)))
+        root_cov_stl = torch.matmul(torch.matmul(eigvects, eigroot_mat), torch.transpose(eigvects, -1, -2))
+        tr_cov_stl = torch.sum(eigvals.clip(0), dim=1, keepdim=True)
 
-        tb,tc,th,tw = target.size()
-        tF = target.view(tb,tc,-1)
-        tMean = torch.mean(tF,dim=2)
-        tCov = self.G(target)
+        tr_cov_synth = torch.sum(torch.linalg.eigvalsh(cov_synth).clip(0), dim=1, keepdim=True)
+        mean_diff_squared = torch.mean((mean_synth - mean_stl) ** 2)
+        cov_prod = torch.matmul(torch.matmul(root_cov_stl, cov_synth), root_cov_stl)
+        var_overlap = torch.sum(torch.sqrt(torch.linalg.eigvalsh(cov_prod).clip(0.1)), dim=1,
+                                keepdim=True)  # .clip(0) meant errors getting eigvals
+        dist = mean_diff_squared + tr_cov_stl + tr_cov_synth - 2 * var_overlap
+        return dist
 
-        loss = self.mse_loss(iMean,tMean) + self.mse_loss(iCov,tCov)
-        return loss/tb
+    def forward(self, input_f, target_f):
+
+        mean_synth, cov_synth = self.calc_2_moments(input_f)  # input mean and cov
+        mean_stl, cov_stl = self.calc_2_moments(target_f)  # target mean and cov
+        loss = self.l2wass_dist(mean_stl, cov_stl, mean_synth, cov_synth)
+
+        return loss.mean() * self.scale_factor
 
 
 class TVLoss(nn.Module):
@@ -47,7 +65,7 @@ class TVLoss(nn.Module):
         h_tv = torch.pow((image[:, :, 1:, :] - image[:, :, :height - 1, :]), 2).div(count_h)
         w_tv = torch.pow((image[:, :, :, 1:] - image[:, :, :, :width - 1]), 2).div(count_w)
         tv_loss = torch.sum(h_tv) + torch.sum(w_tv)
-        return 2 * tv_loss / batch_size
+        return (2 * tv_loss / batch_size)*1000
 
     @staticmethod
     def _tensor_size(t):
@@ -263,7 +281,7 @@ class RGBuvHistBlock(nn.Module):
 class HistLoss(nn.Module):
     def __init__(self, intensity_scale=True,
                  histogram_size=64,
-                 max_input_size=256,
+                 max_input_size=128,
                  hist_boundary=[-3, 3],
                  method = 'inverse-quadratic'):   # options:'thresholding','RBF','inverse-quadratic'
         super(HistLoss, self).__init__()
@@ -281,7 +299,7 @@ class HistLoss(nn.Module):
                           (torch.sqrt(torch.sum(torch.pow(torch.sqrt(target_hist) -
                                                 torch.sqrt(input_hist), 2)))) /input_hist.shape[0])
 
-        return histogram_loss
+        return histogram_loss*100
 
 
 if __name__=="__main__":
