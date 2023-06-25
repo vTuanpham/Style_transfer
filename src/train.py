@@ -67,7 +67,7 @@ def parse_args(args):
     parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help="Initial learning rate (after the potential warmup period) to use.")
     parser.add_argument('--gradient_threshold', type=float, default=None,
-                        help="Gradient threshold for clipping (use for exploding gradient)")
+                        help="Gradient threshold for clipping (use for exploding gradient) (recommended range 1-10)")
     parser.add_argument('--warm_up_epoch', type=int, default=1,
                         help="Warmup period")
     parser.add_argument('--alpha', type=float, default=5e-5,
