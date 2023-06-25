@@ -23,5 +23,5 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --do_eval_per_epoch                           \
                    --deep_dense                                  \
                    --optim_name adam                             \
-                   --gradient_threshold 20
+                   --gradient_threshold 1
 

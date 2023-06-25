@@ -340,6 +340,12 @@ class Trainer:
         scheduler_steps = math.ceil(steps_per_epoch * self.step_frequency)
         scheduler_count = 0
 
+        # Register backward hook for gradient clipping, this prevents the gradient from exploding
+        # (recommended range 1-10)
+        if self.gradient_threshold is not None:
+            for p in transformer.parameters():
+                p.register_hook(lambda grad: torch.clamp(grad, -self.gradient_threshold, self.gradient_threshold))
+
         print(f"\n --- Training init log --- \n")
         print(f"\n Number of epoch: {self.num_train_epochs}"
               f"\n Optim name: {self.optim_name}"
@@ -401,10 +407,11 @@ class Trainer:
                     style_features.append({"orginal": org_output_features[layer_idx],
                                              "model_output": gen_output_features[layer_idx]})
 
-                loss_content, loss_style, variation_loss, histogram_loss, total_loss = self.compute_loss(content_features,
+                loss_content, loss_style, variation_loss, histogram_loss, total_loss = self.compute_loss(
+                                                                                        content_features,
                                                                                         style_features,
-                                                                                         decode_imgs,
-                                                                                         style_imgs)
+                                                                                        decode_imgs,
+                                                                                        style_imgs)
 
                 del content_features, style_features, encode_Cfeatures, encode_Sfeatures
                 del org_output_features, gen_output_features, transformed_features
@@ -412,10 +419,6 @@ class Trainer:
                 # Backpropagation and optimization
                 transformer_optimizer.zero_grad()
                 total_loss.backward()
-
-                if self.gradient_threshold is not None:
-                    nn.utils.clip_grad_norm_(transformer.parameters(), max_norm=self.gradient_threshold)
-
                 transformer_optimizer.step()
 
                 completed_step += step
@@ -505,7 +508,7 @@ class Trainer:
                                 "Min_loss": min(loss_list)}, step=completed_step)
 
             if avg_epoch_total_loss == min(loss_list) and self.save_best:
-                print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
+                print(f"\n Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
                 self.save(transformer, transformer_optimizer, info={"total": avg_epoch_total_loss,
                                                                     "content": avg_epoch_content_loss,
                                                                     "style": avg_epoch_style_loss,
@@ -513,7 +516,7 @@ class Trainer:
                                                                     "completed_step": completed_step
                                                                     }, result=plots)
             elif not self.save_best:
-                print(f"Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
+                print(f"\n Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
                 self.save(transformer, transformer_optimizer, info={"total": avg_epoch_total_loss,
                                                                     "content": avg_epoch_content_loss,
                                                                     "style": avg_epoch_style_loss,
@@ -521,7 +524,7 @@ class Trainer:
                                                                     "completed_step": completed_step
                                                                     }, result=plots)
             else:
-                print(f"Discarding epoch [{epoch + 1}/{self.num_train_epochs}]")
+                print(f"\n Discarding epoch [{epoch + 1}/{self.num_train_epochs}]")
                 if self.plot_per_epoch:
                     plot.close('all')
                 continue
@@ -582,7 +585,7 @@ class Trainer:
                     raise "Unable to creating or initializing artifact to log cpkt!"
 
     @staticmethod
-    def plot_comparison(encoder, decoder, transformer, content_img_url, style_img_url,
+    def plot_comparison(encoder, decoder, transformer, content_img_url: list, style_img_url: list,
                         transformation, device, sleep: int = 5, plot: bool = True):
         try:
             for content_url, style_url in zip(content_img_url, style_img_url):
@@ -595,7 +598,6 @@ class Trainer:
         style_image_tensor = transformation(style_image).to(device)
 
         transformer.eval()
-        decoder.eval()
 
         encode_Cfeatures = encoder(content_image_tensor.unsqueeze(0))
         encode_Sfeatures = encoder(style_image_tensor.unsqueeze(0))
