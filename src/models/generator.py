@@ -91,7 +91,7 @@ class Decoder(nn.Module):
 			SymmetricPadding2D((1, 1, 1, 1)),
 			nn.Conv2d(64, 3, (3, 3)),
 		)
-		self.decoder.load_state_dict(torch.load(r"./src/models/checkpoints/WCT_encoder_decoder/feature_invertor_conv3_1.pth"))
+		# self.decoder.load_state_dict(torch.load(r"./src/models/checkpoints/WCT_encoder_decoder/feature_invertor_conv3_1.pth"))
 
 	def forward(self, x):
 		out = self.decoder(x)

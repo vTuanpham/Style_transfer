@@ -472,7 +472,7 @@ class Trainer:
                                                   desc="Evaluating progress", position=2, leave=False)):
                     content_img_paths = batch['content_image']
                     style_img_paths = batch['style_image']
-                    plot = self.plot_comparison(encoder, decoder, transformer,
+                    plot, _ = self.plot_comparison(encoder, decoder, transformer,
                                                  content_img_paths, style_img_paths,
                                                  transforms.Compose([
                                                      transforms.Resize(300),
@@ -606,6 +606,8 @@ class Trainer:
 
         decode_img = decoder(transformed_features)
 
+        del encode_Cfeatures, encode_Sfeatures, transformed_features
+
         # Convert tensor images to numpy arrays and adjust their shape if needed
         image1_np = content_image_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()  # Adjust dimensions as per your tensor shape
         image2_np = style_image_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()
@@ -640,4 +642,4 @@ class Trainer:
             plt.show(block=False)
             plt.pause(sleep)
 
-        return plt
+        return plt, decode_img
