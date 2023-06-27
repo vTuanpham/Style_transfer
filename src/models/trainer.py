@@ -58,6 +58,8 @@ class Trainer:
                  optim_name: str = 'adam',
                  with_tracking: bool = False,
                  log_weights_cpkt: bool = False,
+                 do_decoder_train: bool = False,
+                 use_pretrained_WCTDECODER: bool = False,
                  delta: float = 2,
                  step_frequency: float = 0.5,
                  transformer_size: int = 32,
@@ -97,6 +99,8 @@ class Trainer:
         self.do_eval_per_epoch = do_eval_per_epoch
         self.optim_name = optim_name
         self.gradient_threshold = gradient_threshold
+        self.do_decoder_train = do_decoder_train
+        self.use_pretrained_WCTDECODER = use_pretrained_WCTDECODER
 
         set_seed(seed)
         self.seed = seed
@@ -140,7 +144,9 @@ class Trainer:
                         "optim_name": self.optim_name,
                         "step_frequency": self.step_frequency,
                         "seed": self.seed,
-                        "warmup_epochs": self.warm_up_epoch
+                        "warmup_epochs": self.warm_up_epoch,
+                        "do_decoder_train": self.do_decoder_train,
+                        "use_pretrained_WCTDECODER": self.use_pretrained_WCTDECODER
                         }
                 )
                 if self.log_weights_cpkt:
@@ -210,7 +216,8 @@ class Trainer:
 
     def build_model(self):
         encoder = Encoder().eval().to(self.device)
-        decoder = Decoder().eval().to(self.device)
+        decoder = Decoder(use_pretrained_WCT=self.use_pretrained_WCTDECODER if self.resume_from_checkpoint is None else False,
+                          do_train=self.do_decoder_train).to(self.device)
 
         transformer = MTranspose(matrix_size=self.transformer_size,
                                  layer_depth=self.layer_depth,
@@ -259,7 +266,14 @@ class Trainer:
         encoder, decoder, transformer, content_extractors, style_extractors = self.build_model()
 
         # Define the optimizer
-        transformer_optimizer = self.get_optimizer(self.optim_name, transformer.parameters(), lr=self.learning_rate)
+        if self.do_decoder_train:
+            transformer_optimizer = self.get_optimizer(self.optim_name,
+                                                       list(transformer.parameters()) + list(decoder.parameters()),
+                                                       lr=self.learning_rate)
+        else:
+            transformer_optimizer = self.get_optimizer(self.optim_name,
+                                                       transformer.parameters(),
+                                                       lr=self.learning_rate)
 
         # Define the learning rate scheduler
         def lr_lambda(epoch, warm_up_epoch):
@@ -290,14 +304,27 @@ class Trainer:
             except Exception:
                 raise "Unable to load weight to the model, wrong model structure compare to checkpoint!"
 
+            try:
+                if checkpoint['decoder_state_dict'] is not None:
+                    print(f"\n Loading decoder model...")
+                    decoder.load_state_dict(checkpoint['decoder_state_dict'])
+            except Exception:
+                raise "Unable to load weight to the decoder model, wrong model structure compare to checkpoint!"
+
             print(f"\n Loading optimizer...")
             try:
                 if self.optim_name == checkpoint['optim_name']:
                     transformer_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
                 else:
-                    transformer_optimizer = self.get_optimizer(checkpoint['optim_name'],
-                                                               transformer.parameters(), lr=self.learning_rate)
-                    transformer_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                    if not self.do_decoder_train:
+                        transformer_optimizer = self.get_optimizer(checkpoint['optim_name'],
+                                                                   transformer.parameters(), lr=self.learning_rate)
+                        transformer_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                    else:
+                        transformer_optimizer = self.get_optimizer(checkpoint['optim_name'],
+                                                           list(transformer.parameters()) + list(decoder.parameters()),
+                                                           lr=self.learning_rate)
+                        transformer_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
                     warnings.warn(f"Set optim {self.optim_name} different from checkpoint optim {checkpoint['optim_name']},"
                                   f" switching to {checkpoint['optim_name']}")
                     self.optim_name = checkpoint['optim_name']
@@ -351,6 +378,8 @@ class Trainer:
               f"\n Optim name: {self.optim_name}"
               f"\n Gradient threshold: {self.gradient_threshold}"
               f"\n Init epoch: {init_epoch}"
+              f"\n Do decoder training: {self.do_decoder_train}"
+              f"\n Load pretrained WCT image recover: {self.use_pretrained_WCTDECODER}"
               f"\n Batch size: {self.per_device_batch_size}"
               f"\n Total number of batch: {len(self.dataloaders['train'])}"
               f"\n Total number of examples: {len(self.dataloaders['train'].dataset)}"
@@ -373,6 +402,7 @@ class Trainer:
             total_epoch_style_loss, total_epoch_var_loss = 0, 0
             total_epoch_hist_loss = 0
             transformer.train()
+            if self.do_decoder_train: decoder.train()
             for step, batch in enumerate(tqdm(self.dataloaders['train'], colour='blue', desc="Training batch progress",
                                               position=1, leave=False)):
                 content_imgs = batch['content_image'].to(self.device)
@@ -509,7 +539,7 @@ class Trainer:
 
             if avg_epoch_total_loss == min(loss_list) and self.save_best:
                 print(f"\n Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
-                self.save(transformer, transformer_optimizer, info={"total": avg_epoch_total_loss,
+                self.save(transformer, transformer_optimizer, decoder, info={"total": avg_epoch_total_loss,
                                                                     "content": avg_epoch_content_loss,
                                                                     "style": avg_epoch_style_loss,
                                                                     "epoch": epoch,
@@ -517,7 +547,7 @@ class Trainer:
                                                                     }, result=plots)
             elif not self.save_best:
                 print(f"\n Saving epoch [{epoch + 1}/{self.num_train_epochs}]")
-                self.save(transformer, transformer_optimizer, info={"total": avg_epoch_total_loss,
+                self.save(transformer, transformer_optimizer, decoder, info={"total": avg_epoch_total_loss,
                                                                     "content": avg_epoch_content_loss,
                                                                     "style": avg_epoch_style_loss,
                                                                     "epoch": epoch,
@@ -532,7 +562,7 @@ class Trainer:
         if self.with_tracking:
             self.wandb.finish()
 
-    def save(self, transformer, transformer_optimizer, info=None, result=None):
+    def save(self, transformer, transformer_optimizer, decoder=None, info=None, result=None):
         dir_name = f"TotalL_{info['total']}_Content_{info['content']}_Style_{info['style']}"
         save_path_dir = os.path.join(self.output_dir, dir_name)
         print(f" Saving in {save_path_dir}")
@@ -547,6 +577,7 @@ class Trainer:
         torch.save({
             'epoch': info['epoch'],
             'model_state_dict': transformer.state_dict(),
+            "decoder_state_dict": decoder.state_dict() if decoder is not None else None,
             'optimizer_state_dict': transformer_optimizer.state_dict(),
             "optim_name": self.optim_name,
             'loss': info['total'],
@@ -598,6 +629,7 @@ class Trainer:
         style_image_tensor = transformation(style_image).to(device)
 
         transformer.eval()
+        decoder.eval()
 
         encode_Cfeatures = encoder(content_image_tensor.unsqueeze(0))
         encode_Sfeatures = encoder(style_image_tensor.unsqueeze(0))

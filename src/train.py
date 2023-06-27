@@ -54,6 +54,10 @@ def parse_args(args):
                         help="Depth of CNN layer")
     parser.add_argument('--deep_learner', action='store_true',
                         help="Whether to enable deepest layer for abstract learning.")
+    parser.add_argument('--do_decoder_train', action='store_true',
+                        help="Whether to enable decoder training to expand model capacity.")
+    parser.add_argument('--use_pretrained_WCTDECODER', action='store_true',
+                        help="Whether to load pretrained WCT decoder that were trained on image recovery.")
     parser.add_argument('--deep_dense', action='store_true',
                         help="Whether to enable deepest dense layer for bottleneck")
 
@@ -169,7 +173,9 @@ def main(args):
         "log_weights_cpkt": args.log_weights_cpkt,
         "step_frequency": args.step_frequency,
         "optim_name": args.optim_name,
-        "gradient_threshold": args.gradient_threshold
+        "gradient_threshold": args.gradient_threshold,
+        "do_decoder_train": args.do_decoder_train,
+        "use_pretrained_WCTDECODER": args.use_pretrained_WCTDECODER
     }
     trainer = Trainer(**trainer_args)
     trainer.train()

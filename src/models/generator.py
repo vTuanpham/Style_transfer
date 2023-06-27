@@ -71,7 +71,7 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-	def __init__(self):
+	def __init__(self, use_pretrained_WCT: bool=False, do_train: bool=False):
 		super(Decoder, self).__init__()
 		self.decoder = nn.Sequential(  # Sequential,
 			SymmetricPadding2D((1, 1, 1, 1)),
@@ -91,7 +91,14 @@ class Decoder(nn.Module):
 			SymmetricPadding2D((1, 1, 1, 1)),
 			nn.Conv2d(64, 3, (3, 3)),
 		)
-		# self.decoder.load_state_dict(torch.load(r"./src/models/checkpoints/WCT_encoder_decoder/feature_invertor_conv3_1.pth"))
+		if use_pretrained_WCT:
+			print("\n Using WCT pretrained image recover...")
+			self.decoder.load_state_dict(torch.load(r"./src/models/checkpoints/WCT_encoder_decoder/feature_invertor_conv3_1.pth"))
+		if do_train:
+			print("\n Enabling Decoder training...")
+			self.decoder.train()
+		else:
+			self.decoder.eval()
 
 	def forward(self, x):
 		out = self.decoder(x)
