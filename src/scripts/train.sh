@@ -26,6 +26,7 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --deep_dense                                  \
                    --optim_name adam                             \
                    --gradient_threshold 5                        \
+                   --use_pretrained_WCTDECODER                   \
                    --do_decoder_train
 
 
