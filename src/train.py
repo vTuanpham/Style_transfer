@@ -7,6 +7,7 @@ import torchvision.transforms as transforms
 from src.data.dataloader import STDataloader
 from src.models.trainer import Trainer
 from src.utils.custom_transform import RGBToGrayscaleStacked, AddGaussianNoise
+from src.utils.utils import clear_cuda_cache
 
 
 def parse_args(args):
@@ -113,6 +114,7 @@ def parse_args(args):
 
 def main(args):
     args = parse_args(args)
+    clear_cuda_cache()
 
     dataloader_args = {
         "content_datapath": args.content_datapath,
