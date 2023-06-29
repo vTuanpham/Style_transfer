@@ -9,7 +9,7 @@ import torchvision.transforms as transforms
 
 
 class VincentStyleLossToTarget(nn.Module):
-    def __init__(self, scale_factor=1e-3):
+    def __init__(self, scale_factor=1e-4):
         super(VincentStyleLossToTarget, self).__init__()
         self.scale_factor = scale_factor  # Defaults tend to be very large, we scale to make them easier to work with
 

@@ -1,6 +1,7 @@
 import os
 import random
 import warnings
+import math
 from typing import List, Dict
 
 import PIL.Image
@@ -100,19 +101,22 @@ class STDataloader:
     def __call__(self, *args, **kwargs) -> Dict:
         # Only loading the image url to save on Ram
         content_image_urls = []
-        for path in self.content_datapath:
-            content_image_urls += self.get_img_path_list(path)
+        per_max_content_train_samples = math.floor(self.max_content_train_samples / len(self.content_datapath))
+        for idx, path in enumerate(self.content_datapath):
+            print(f"\n Loading {per_max_content_train_samples} samples in {self.content_datapath[idx].split('/')[-1]}...")
+            content_image_urls += self.get_img_path_list(path)[:per_max_content_train_samples]
 
         style_image_urls = []
-        for path in self.style_datapath:
-            style_image_urls += self.get_img_path_list(path)
+        per_max_style_train_samples = math.floor(self.max_style_train_samples / len(self.style_datapath))
+        for idx, path in enumerate(self.style_datapath):
+            print(f"\n Loading {per_max_style_train_samples} samples in {self.style_datapath[idx].split('/')[-1]}...")
+            style_image_urls += self.get_img_path_list(path)[:per_max_style_train_samples]
 
         content_eval_urls = self.get_img_path_list(self.eval_contentpath)
         style_eval_urls = self.get_img_path_list(self.eval_stylepath)
 
-        train_dataset = STDataset(content_image_urls[:self.max_content_train_samples],
-                            style_image_urls[:self.max_style_train_samples],
-                            transform_content=self.transform_content, transform_style=self.transform_style)
+        train_dataset = STDataset(content_image_urls,style_image_urls,
+                                  transform_content=self.transform_content, transform_style=self.transform_style)
 
         eval_dataset = STDataset(sorted(content_eval_urls), sorted(style_eval_urls), url_only=True)
 

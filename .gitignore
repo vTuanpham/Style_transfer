@@ -1,0 +1,12 @@
+**/__pycache__
+fe/
+wandb/
+
+src/data/*
+!src/data/dummy
+!src/data/anotherdummy
+!src/data/eval_dir
+
+src/models/checkpoints/
+!src/models/WCT_encoder_decoder
+
