@@ -7,7 +7,7 @@ import torchvision.transforms as transforms
 from src.data.dataloader import STDataloader
 from src.models.trainer import Trainer
 from src.utils.custom_transform import RGBToGrayscaleStacked, AddGaussianNoise
-from src.utils.utils import clear_cuda_cache
+from src.utils.utils import ParseKwargsOptim, clear_cuda_cache
 
 
 def parse_args(args):
@@ -63,12 +63,11 @@ def parse_args(args):
                         help="Whether to enable deepest dense layer for bottleneck")
 
     # Optimizer
-    parser.add_argument('--vgg_model_type', type=str, default='19',help=(
+    parser.add_argument('--vgg_model_type', type=str, default='19', help=(
             "Which models of the vgg to use as a feature extractor"
         ))
-    parser.add_argument('--optim_name', type=str, default='adam', help=(
-            "Which optimizer to use"
-        ))
+    parser.add_argument('--optim_name', nargs='+', default={'optim_name': 'adam'}, action=ParseKwargsOptim,
+                        help="Which optimizer to use")
     parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help="Initial learning rate (after the potential warmup period) to use.")
     parser.add_argument('--gradient_threshold', type=float, default=None,
@@ -124,6 +123,7 @@ def main(args):
         "batch_size": args.batch_size,
         "eval_batch_size": args.eval_batch_size,
         "transform_content": transforms.Compose([
+            transforms.Resize(300),
             transforms.RandomCrop((args.crop_width, args.crop_height), pad_if_needed=True, padding=1),
             transforms.ToTensor(),
             RGBToGrayscaleStacked(),
@@ -132,6 +132,7 @@ def main(args):
             transforms.RandomHorizontalFlip(p=0.5)
         ]),
         "transform_style": transforms.Compose([
+            transforms.Resize(300),
             transforms.RandomCrop((args.crop_width, args.crop_height), pad_if_needed=True, padding=1),
             transforms.ToTensor(),
             AddGaussianNoise(mean=0.5, sigma_range=(0., 0.08), p=0.5),

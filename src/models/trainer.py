@@ -55,7 +55,7 @@ class Trainer:
                  save_best: bool = True,
                  resume_from_checkpoint: str = None,
                  vgg_model_type: str = '19',
-                 optim_name: str = 'adam',
+                 optim_name: dict = {'optim_name': 'adam'},
                  with_tracking: bool = False,
                  log_weights_cpkt: bool = False,
                  do_decoder_train: bool = False,
@@ -188,31 +188,37 @@ class Trainer:
         return feature_extractors
 
     @staticmethod
-    def get_optimizer(optimizer_name: str, parameters, **kwargs):
+    def get_optimizer(optimizer_name: str, parameters, learning_rate: float=5e-5, kwargs: dict=None):
         optimizer_name = optimizer_name.lower()
 
-        if optimizer_name == 'sgd':
-            return optim.SGD(parameters, **kwargs)
-        elif optimizer_name == 'adam':
-            return optim.Adam(parameters, **kwargs)
-        elif optimizer_name == 'rmsprop':
-            return optim.RMSprop(parameters, **kwargs)
-        elif optimizer_name == 'adagrad':
-            return optim.Adagrad(parameters, **kwargs)
-        elif optimizer_name == 'adadelta':
-            return optim.Adadelta(parameters, **kwargs)
-        elif optimizer_name == 'adamw':
-            return optim.AdamW(parameters, **kwargs)
-        elif optimizer_name == 'adamax':
-            return optim.Adamax(parameters, **kwargs)
-        elif optimizer_name == 'sparseadam':
-            return optim.SparseAdam(parameters, **kwargs)
-        elif optimizer_name == 'lbfgs':
-            return optim.LBFGS(parameters, **kwargs)
-        elif optimizer_name == 'rprop':
-            return optim.Rprop(parameters, **kwargs)
-        else:
-            raise ValueError(f"Optimizer '{optimizer_name}' not supported.")
+        kwargs_clone = kwargs.copy()
+        del kwargs_clone['optim_name']
+
+        try:
+            if optimizer_name == 'sgd':
+                return optim.SGD(parameters, lr=learning_rate, **kwargs_clone)
+            elif optimizer_name == 'adam':
+                return optim.Adam(parameters, lr=learning_rate, **kwargs_clone)
+            elif optimizer_name == 'rmsprop':
+                return optim.RMSprop(parameters, lr=learning_rate, **kwargs_clone)
+            elif optimizer_name == 'adagrad':
+                return optim.Adagrad(parameters, lr=learning_rate, **kwargs_clone)
+            elif optimizer_name == 'adadelta':
+                return optim.Adadelta(parameters, lr=learning_rate, **kwargs_clone)
+            elif optimizer_name == 'adamw':
+                return optim.AdamW(parameters, lr=learning_rate, **kwargs_clone)
+            elif optimizer_name == 'adamax':
+                return optim.Adamax(parameters, lr=learning_rate, **kwargs_clone)
+            elif optimizer_name == 'sparseadam':
+                return optim.SparseAdam(parameters, lr=learning_rate, **kwargs_clone)
+            elif optimizer_name == 'lbfgs':
+                return optim.LBFGS(parameters, lr=learning_rate, **kwargs_clone)
+            elif optimizer_name == 'rprop':
+                return optim.Rprop(parameters, lr=learning_rate, **kwargs_clone)
+            else:
+                raise ValueError(f"Optimizer '{optimizer_name}' not supported.")
+        except TypeError:
+            raise "Invalid argument for optimizer!"
 
     def build_model(self):
         encoder = Encoder().eval().to(self.device)
@@ -267,13 +273,17 @@ class Trainer:
 
         # Define the optimizer
         if self.do_decoder_train:
-            transformer_optimizer = self.get_optimizer(self.optim_name,
-                                                       list(transformer.parameters()) + list(decoder.parameters()),
-                                                       lr=self.learning_rate)
+            transformer_optimizer = self.get_optimizer(optimizer_name=self.optim_name['optim_name'],
+                                                       parameters=list(transformer.parameters()) + list(decoder.parameters()),
+                                                       learning_rate=self.learning_rate,
+                                                       kwargs=self.optim_name
+                                                       )
         else:
-            transformer_optimizer = self.get_optimizer(self.optim_name,
-                                                       transformer.parameters(),
-                                                       lr=self.learning_rate)
+            transformer_optimizer = self.get_optimizer(optimizer_name=self.optim_name['optim_name'],
+                                                       parameters=transformer.parameters(),
+                                                       learning_rate=self.learning_rate,
+                                                       kwargs=self.optim_name
+                                                       )
 
         # Define the learning rate scheduler
         def lr_lambda(epoch, warm_up_epoch):
@@ -313,21 +323,26 @@ class Trainer:
 
             print(f"\n Loading optimizer...")
             try:
-                if self.optim_name == checkpoint['optim_name']:
+                if self.optim_name['optim_name'] == checkpoint['optim_name']['optim_name']:
                     transformer_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
                 else:
                     if not self.do_decoder_train:
-                        transformer_optimizer = self.get_optimizer(checkpoint['optim_name'],
-                                                                   transformer.parameters(), lr=self.learning_rate)
+                        transformer_optimizer = self.get_optimizer(optimizer_name=checkpoint['optim_name']['optim_name'],
+                                                                   parameters=transformer.parameters(),
+                                                                   learning_rate=self.learning_rate,
+                                                                   kwargs=checkpoint['optim_name']
+                                                                   )
                         transformer_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
                     else:
-                        transformer_optimizer = self.get_optimizer(checkpoint['optim_name'],
-                                                           list(transformer.parameters()) + list(decoder.parameters()),
-                                                           lr=self.learning_rate)
+                        transformer_optimizer = self.get_optimizer(optimizer_name=checkpoint['optim_name']['optim_name'],
+                                                                   parameters=list(transformer.parameters()) + list(decoder.parameters()),
+                                                                   learning_rate=self.learning_rate,
+                                                                   kwargs=checkpoint['optim_name']
+                                                                   )
                         transformer_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-                    warnings.warn(f"Set optim {self.optim_name} different from checkpoint optim {checkpoint['optim_name']},"
-                                  f" switching to {checkpoint['optim_name']}")
-                    self.optim_name = checkpoint['optim_name']
+                    warnings.warn(f"Set optim {self.optim_name['optim_name']} different from checkpoint optim {checkpoint['optim_name']['optim_name']},"
+                                  f" switching to {checkpoint['optim_name']['optim_name']}")
+                    self.optim_name['optim_name'] = checkpoint['optim_name']['optim_name']
             except Exception:
                 raise "Unable to load optimizer state!"
 
