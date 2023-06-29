@@ -45,14 +45,14 @@ class FFExtractor(nn.Module):
                                                           out_channels=512,
                                                           kernel_size=(3, 3),
                                                           stride=1, padding=0),
-                                                nn.InstanceNorm2d(num_features=512, momentum=0.5),
+                                                nn.InstanceNorm2d(num_features=512, momentum=0.5, affine=True),
                                                 nn.ReLU(inplace=True),
                                                 SymmetricPadding2D((1, 1, 1, 1)),
                                                 nn.Conv2d(in_channels=512,
                                                           out_channels=256,
                                                           kernel_size=(3, 3),
                                                           stride=1, padding=0),
-                                                nn.InstanceNorm2d(num_features=256, momentum=0.5),
+                                                nn.InstanceNorm2d(num_features=256, momentum=0.5, affine=True),
                                                 nn.ReLU(inplace=True),
                                             )
         self.cnn_block_deep = nn.Sequential(
@@ -61,7 +61,7 @@ class FFExtractor(nn.Module):
                                           out_channels=256,
                                           kernel_size=(3, 3),
                                           stride=1, padding=0),
-                                nn.InstanceNorm2d(num_features=256, momentum=0.5, eps=0.1),
+                                nn.InstanceNorm2d(num_features=256, momentum=0.65, eps=0.3, affine=True),
                                 nn.PReLU(num_parameters=1),
                                 # nn.ReLU(inplace=True)
         )
@@ -71,7 +71,7 @@ class FFExtractor(nn.Module):
                                            out_channels=128,
                                            kernel_size=(3,3),
                                            stride=1, padding=0),
-                                 nn.InstanceNorm2d(num_features=128, momentum=0.5, eps=0.1),
+                                 nn.InstanceNorm2d(num_features=128, momentum=0.65, eps=0.3, affine=True),
                                  nn.PReLU(num_parameters=1),
                                  # nn.ReLU(inplace=True),
                                  SymmetricPadding2D((1, 1, 1, 1)),
@@ -79,7 +79,7 @@ class FFExtractor(nn.Module):
                                            out_channels=64,
                                            kernel_size=(3,3),
                                            stride=1, padding=0),
-                                 nn.InstanceNorm2d(num_features=64, momentum=0.5, eps=0.1),
+                                 nn.InstanceNorm2d(num_features=64, momentum=0.65, eps=0.3, affine=True),
                                  nn.PReLU(num_parameters=1),
                                  # nn.ReLU(inplace=True),
                                  SymmetricPadding2D((1, 1, 1, 1)),
@@ -87,7 +87,7 @@ class FFExtractor(nn.Module):
                                            out_channels=matrix_size,
                                            kernel_size=(3,3),
                                            stride=1, padding=0),
-                                 nn.InstanceNorm2d(num_features=matrix_size, momentum=0.5, eps=0.1)
+                                 nn.InstanceNorm2d(num_features=matrix_size, momentum=0.65, eps=0.3, affine=True)
         )
 
         self.dense_deep = nn.Sequential(
@@ -102,8 +102,6 @@ class FFExtractor(nn.Module):
         out = x
         for idx, layer in enumerate(range(self.layer_depth)):
             out = self.cnn_block_deep(out)
-            # if idx % 10 == 0:
-            #     out = out.clone() + x
         out = out.clone() + x
         if self.deep_learner:
             out = self.cnn_block_super_deep_transition(out)
