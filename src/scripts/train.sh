@@ -27,6 +27,7 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --optim_name rmsprop momentum=0.8             \
                    --gradient_threshold 10                       \
                    --use_pretrained_WCTDECODER                   \
-                   --do_decoder_train
+                   --do_decoder_train                            \
+                   --eps 0.1
 
 

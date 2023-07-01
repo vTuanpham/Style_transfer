@@ -1,3 +1,4 @@
+import datetime
 import io
 import random
 import sys
@@ -5,7 +6,7 @@ import os
 import time
 import math
 import warnings
-
+from argparse import Namespace
 sys.path.insert(0,r'./') #Add root directory here
 
 import torch
@@ -63,10 +64,12 @@ class Trainer:
                  delta: float = 2,
                  step_frequency: float = 0.5,
                  transformer_size: int = 32,
+                 eps: float = 1e-5,
                  gradient_threshold: float = None,
                  layer_depth: int = 1,
                  deep_learner: bool = False,
                  deep_dense: bool = False,
+                 config: Namespace = None,
                  content_layers_idx: List[int] = [12, 16, 21],
                  style_layers_idx: List[int] = [0, 5, 10, 19, 28]
                  ):
@@ -101,6 +104,8 @@ class Trainer:
         self.gradient_threshold = gradient_threshold
         self.do_decoder_train = do_decoder_train
         self.use_pretrained_WCTDECODER = use_pretrained_WCTDECODER
+        self.config = config
+        self.eps = eps
 
         set_seed(seed)
         self.seed = seed
@@ -146,7 +151,9 @@ class Trainer:
                         "seed": self.seed,
                         "warmup_epochs": self.warm_up_epoch,
                         "do_decoder_train": self.do_decoder_train,
-                        "use_pretrained_WCTDECODER": self.use_pretrained_WCTDECODER
+                        "use_pretrained_WCTDECODER": self.use_pretrained_WCTDECODER,
+                        "eps": self.eps,
+                        "full_config": vars(self.config)
                         }
                 )
                 if self.log_weights_cpkt:
@@ -228,7 +235,8 @@ class Trainer:
         transformer = MTranspose(matrix_size=self.transformer_size,
                                  layer_depth=self.layer_depth,
                                  deep_learner=self.deep_learner,
-                                 deep_dense=self.deep_dense).to(self.device)
+                                 deep_dense=self.deep_dense,
+                                 eps=self.eps).to(self.device)
 
         content_extractors = self.get_feature_extractor(self.content_layers_idx, device=self.device)
         style_extractors = self.get_feature_extractor(self.style_layers_idx, device=self.device)
@@ -393,6 +401,7 @@ class Trainer:
               f"\n Optim name: {self.optim_name}"
               f"\n Gradient threshold: {self.gradient_threshold}"
               f"\n Init epoch: {init_epoch}"
+              f"\n EPS: {self.eps}"
               f"\n Do decoder training: {self.do_decoder_train}"
               f"\n Load pretrained WCT image recover: {self.use_pretrained_WCTDECODER}"
               f"\n Batch size: {self.per_device_batch_size}"
@@ -407,8 +416,13 @@ class Trainer:
               f"\n Deep learner: {self.deep_learner}"
               f"\n Device to train: {self.device}\n")
 
-        # Training loop
+        # if self.with_tracking:
+        #     if self.do_decoder_train:
+        #         wandb.watch([transformer, decoder], log='all', log_freq=200)
+        #     else:
+        #         wandb.watch(transformer, log='all', log_freq=200)
 
+        # Training loop
         progress_bar = tqdm(range(init_epoch, self.num_train_epochs), desc="Training progress",
                             colour='green', position=0, leave=True)
 
@@ -609,6 +623,21 @@ class Trainer:
                 "style_layers_idx": self.style_layers_idx
             }
         }, model_path)
+
+        try:
+            config_path = os.path.join(save_path_dir,
+                    f"config_E{info['epoch']}_{'_'.join(str(datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S')).split())}")
+            config_file = open(config_path, "w")
+            config_file.write(f"\n          {PRJ_NAME}\n")
+            config_file.write(f"\n   Epoch: {info['epoch']}")
+            config_file.write(f"\n   Completed step: {info['completed_step']}")
+            config_file.write(f"\n   Loss: {info['total']}")
+            for key, value in vars(self.config).items():
+                config_file.write(f"\n {key}: {value} ")
+            config_file.close()
+        except IOError:
+            warnings.warn(f"Can't save config for this run {info['epoch']}")
+            pass
 
         if result is not None:
             for idx, plot in enumerate(result):

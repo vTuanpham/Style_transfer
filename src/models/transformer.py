@@ -34,7 +34,7 @@ class SymmetricPadding2D(nn.Module):
 
 
 class FFExtractor(nn.Module):
-    def __init__(self, matrix_size=32, layer_depth=1, deep_learner=False, deep_dense=False):
+    def __init__(self, matrix_size=32, layer_depth=1, deep_learner=False, deep_dense=False, eps: float=0.1):
         super(FFExtractor, self).__init__()
         self.layer_depth = layer_depth
         self.deep_learner = deep_learner
@@ -45,14 +45,14 @@ class FFExtractor(nn.Module):
                                                           out_channels=512,
                                                           kernel_size=(3, 3),
                                                           stride=1, padding=0),
-                                                nn.InstanceNorm2d(num_features=512, momentum=0.5, affine=True),
+                                                nn.InstanceNorm2d(num_features=512, momentum=0.1, affine=True),
                                                 nn.ReLU(inplace=True),
                                                 SymmetricPadding2D((1, 1, 1, 1)),
                                                 nn.Conv2d(in_channels=512,
                                                           out_channels=256,
                                                           kernel_size=(3, 3),
                                                           stride=1, padding=0),
-                                                nn.InstanceNorm2d(num_features=256, momentum=0.5, affine=True),
+                                                nn.InstanceNorm2d(num_features=256, momentum=0.1, affine=True),
                                                 nn.ReLU(inplace=True),
                                             )
         self.cnn_block_deep = nn.Sequential(
@@ -61,7 +61,7 @@ class FFExtractor(nn.Module):
                                           out_channels=256,
                                           kernel_size=(3, 3),
                                           stride=1, padding=0),
-                                nn.InstanceNorm2d(num_features=256, momentum=0.65, eps=0.3, affine=True),
+                                nn.InstanceNorm2d(num_features=256, momentum=0.5, eps=eps, affine=True),
                                 nn.PReLU(num_parameters=1),
                                 # nn.ReLU(inplace=True)
         )
@@ -71,7 +71,7 @@ class FFExtractor(nn.Module):
                                            out_channels=128,
                                            kernel_size=(3,3),
                                            stride=1, padding=0),
-                                 nn.InstanceNorm2d(num_features=128, momentum=0.65, eps=0.3, affine=True),
+                                 nn.InstanceNorm2d(num_features=128, momentum=0.5, eps=eps, affine=True),
                                  nn.PReLU(num_parameters=1),
                                  # nn.ReLU(inplace=True),
                                  SymmetricPadding2D((1, 1, 1, 1)),
@@ -79,7 +79,7 @@ class FFExtractor(nn.Module):
                                            out_channels=64,
                                            kernel_size=(3,3),
                                            stride=1, padding=0),
-                                 nn.InstanceNorm2d(num_features=64, momentum=0.65, eps=0.3, affine=True),
+                                 nn.InstanceNorm2d(num_features=64, momentum=0.5, eps=eps, affine=True),
                                  nn.PReLU(num_parameters=1),
                                  # nn.ReLU(inplace=True),
                                  SymmetricPadding2D((1, 1, 1, 1)),
@@ -87,7 +87,7 @@ class FFExtractor(nn.Module):
                                            out_channels=matrix_size,
                                            kernel_size=(3,3),
                                            stride=1, padding=0),
-                                 nn.InstanceNorm2d(num_features=matrix_size, momentum=0.65, eps=0.3, affine=True)
+                                 nn.InstanceNorm2d(num_features=matrix_size, momentum=0.5, eps=eps, affine=True)
         )
 
         self.dense_deep = nn.Sequential(
@@ -119,7 +119,8 @@ class MTranspose(nn.Module):
     def __init__(self, matrix_size=32,
                  layer_depth=1,
                  deep_learner = False,
-                 deep_dense: bool = False):
+                 deep_dense: bool = False,
+                 eps: float=1e-5):
         super(MTranspose, self).__init__()
         self.matrix_size = matrix_size
         self.compress = nn.Conv2d(in_channels=256,
@@ -134,11 +135,13 @@ class MTranspose(nn.Module):
         self.style_FFE = FFExtractor(matrix_size=matrix_size,
                                      layer_depth=layer_depth,
                                      deep_learner=deep_learner,
-                                     deep_dense=deep_dense)
+                                     deep_dense=deep_dense,
+                                     eps=eps)
         self.content_FFE = FFExtractor(matrix_size=matrix_size,
                                        layer_depth=layer_depth,
                                        deep_learner=deep_learner,
-                                       deep_dense=False)
+                                       deep_dense=False,
+                                       eps=eps)
 
     def forward(self, content_features, style_features):
        cbatch, cchannels, cheight, cwidth = content_features.size()
