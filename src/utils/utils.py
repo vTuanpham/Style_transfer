@@ -47,7 +47,11 @@ class ParseKwargsOptim(argparse.Action):
                     try:
                         value = float(value)
                     except ValueError:
-                        pass  # Value cannot be converted, keep it as a string
+                        # Try converting value to tuple of floats or ints
+                        try:
+                            value = tuple(map(float, value.split(',')))
+                        except ValueError:
+                            pass  # Value cannot be converted, keep it as a string
 
                 kwargs_dict[key] = value
 

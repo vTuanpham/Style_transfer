@@ -53,6 +53,8 @@ def parse_args(args):
                         help="Size of the transformation matrix")
     parser.add_argument('--CNN_layer_depth', type=int, default=1,
                         help="Depth of CNN layer")
+    parser.add_argument('--eps', type=float, default=1e-5,
+                        help="Epsilon value for Instance Norm")
     parser.add_argument('--deep_learner', action='store_true',
                         help="Whether to enable deepest layer for abstract learning.")
     parser.add_argument('--do_decoder_train', action='store_true',
@@ -127,6 +129,7 @@ def main(args):
             transforms.RandomCrop((args.crop_width, args.crop_height), pad_if_needed=True, padding=1),
             transforms.ToTensor(),
             RGBToGrayscaleStacked(),
+            transforms.RandomRotation(degrees=90),
             transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.5),
             transforms.ColorJitter(brightness=0.2, contrast=0.4, saturation=0.3, hue=0.1),
             transforms.RandomHorizontalFlip(p=0.5)
@@ -135,6 +138,7 @@ def main(args):
             transforms.Resize(300),
             transforms.RandomCrop((args.crop_width, args.crop_height), pad_if_needed=True, padding=1),
             transforms.ToTensor(),
+            transforms.RandomRotation(degrees=90),
             AddGaussianNoise(mean=0.5, sigma_range=(0., 0.08), p=0.5),
             transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.5),
             transforms.ColorJitter(brightness=0.2, contrast=0.25, saturation=0.3, hue=0.1),
@@ -176,9 +180,11 @@ def main(args):
         "log_weights_cpkt": args.log_weights_cpkt,
         "step_frequency": args.step_frequency,
         "optim_name": args.optim_name,
+        "eps": args.eps,
         "gradient_threshold": args.gradient_threshold,
         "do_decoder_train": args.do_decoder_train,
-        "use_pretrained_WCTDECODER": args.use_pretrained_WCTDECODER
+        "use_pretrained_WCTDECODER": args.use_pretrained_WCTDECODER,
+        "config": args
     }
     trainer = Trainer(**trainer_args)
     trainer.train()
