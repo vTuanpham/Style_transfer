@@ -437,6 +437,10 @@ class Trainer:
                 content_imgs = batch['content_image'].to(self.device)
                 style_imgs = batch['style_image'].to(self.device)
 
+                # Normalize input
+                content_imgs = norm(content_imgs)
+                style_imgs = norm(style_imgs)
+
                 # Encode images
                 encode_Cfeatures = encoder(content_imgs)
                 encode_Sfeatures = encoder(style_imgs)
@@ -446,9 +450,7 @@ class Trainer:
                 # Decode features
                 decode_imgs = decoder(transformed_features)
 
-                # Normalize
-                content_imgs = norm(content_imgs)
-                style_imgs = norm(style_imgs)
+                # Normalize output
                 decode_imgs = norm(decode_imgs)
 
                 # Extract features from VGG19 for content and style images
@@ -531,11 +533,13 @@ class Trainer:
                                                   desc="Evaluating progress", position=2, leave=False)):
                     content_img_paths = batch['content_image']
                     style_img_paths = batch['style_image']
+
                     plot, _ = self.plot_comparison(encoder, decoder, transformer,
                                                  content_img_paths, style_img_paths,
                                                  transforms.Compose([
                                                      transforms.Resize(300),
-                                                     transforms.ToTensor()
+                                                     transforms.ToTensor(),
+                                                     norm
                                                  ]), self.device, plot=self.plot_per_epoch)
                     try:
                         try:
@@ -681,6 +685,10 @@ class Trainer:
         transformed_features = transformer(encode_Cfeatures, encode_Sfeatures)
 
         decode_img = decoder(transformed_features)
+
+        # Normalize output
+        norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        decode_img = norm(decode_img)
 
         del encode_Cfeatures, encode_Sfeatures, transformed_features
 
