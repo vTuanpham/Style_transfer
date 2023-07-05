@@ -55,6 +55,8 @@ def parse_args(args):
                         help="Depth of CNN layer")
     parser.add_argument('--eps', type=float, default=1e-5,
                         help="Epsilon value for Instance Norm")
+    parser.add_argument('--momentum', type=float, default=0.5,
+                        help="Momentum for Instance Norm")
     parser.add_argument('--deep_learner', action='store_true',
                         help="Whether to enable deepest layer for abstract learning.")
     parser.add_argument('--do_decoder_train', action='store_true',
@@ -181,6 +183,7 @@ def main(args):
         "step_frequency": args.step_frequency,
         "optim_name": args.optim_name,
         "eps": args.eps,
+        "momentum": args.momentum,
         "gradient_threshold": args.gradient_threshold,
         "do_decoder_train": args.do_decoder_train,
         "use_pretrained_WCTDECODER": args.use_pretrained_WCTDECODER,

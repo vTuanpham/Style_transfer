@@ -14,7 +14,7 @@ on:
     branches:
       - 'main'
       - 'dev'
-      - '!feat/**'
+      - 'feat/**'
   pull_request:
     type: [opened, reopened, synchronize]
     paths:
