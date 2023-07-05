@@ -75,6 +75,7 @@ class FFExtractor(nn.Module):
                                            out_channels=128,
                                            kernel_size=(3,3),
                                            stride=1, padding=0),
+                                 nn.InstanceNorm2d(num_features=128, momentum=momentum, eps=eps, affine=True),
                                  nn.PReLU(num_parameters=1),
 
                                  SymmetricPadding2D((1, 1, 1, 1)),
@@ -82,13 +83,15 @@ class FFExtractor(nn.Module):
                                            out_channels=64,
                                            kernel_size=(3,3),
                                            stride=1, padding=0),
+                                 nn.InstanceNorm2d(num_features=64, momentum=momentum, eps=eps, affine=True),
                                  nn.PReLU(num_parameters=1),
 
                                  SymmetricPadding2D((1, 1, 1, 1)),
                                  nn.Conv2d(in_channels=64,
                                            out_channels=matrix_size,
                                            kernel_size=(3,3),
-                                           stride=1, padding=0)
+                                           stride=1, padding=0),
+                                 nn.InstanceNorm2d(num_features=matrix_size, momentum=momentum, eps=eps, affine=True)
         )
 
         self.dense_deep = nn.Sequential(
