@@ -440,10 +440,6 @@ class Trainer:
                 content_imgs = batch['content_image'].to(self.device)
                 style_imgs = batch['style_image'].to(self.device)
 
-                # Normalize input
-                content_imgs = norm(content_imgs)
-                style_imgs = norm(style_imgs)
-
                 # Encode images
                 encode_Cfeatures = encoder(content_imgs)
                 encode_Sfeatures = encoder(style_imgs)
@@ -454,6 +450,8 @@ class Trainer:
                 decode_imgs = decoder(transformed_features)
 
                 # Normalize output
+                content_imgs = norm(content_imgs)
+                style_imgs = norm(style_imgs)
                 decode_imgs = norm(decode_imgs)
 
                 # Extract features from VGG19 for content and style images
