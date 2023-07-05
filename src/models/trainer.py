@@ -65,6 +65,7 @@ class Trainer:
                  step_frequency: float = 0.5,
                  transformer_size: int = 32,
                  eps: float = 1e-5,
+                 momentum: float = 0.5,
                  gradient_threshold: float = None,
                  layer_depth: int = 1,
                  deep_learner: bool = False,
@@ -106,6 +107,7 @@ class Trainer:
         self.use_pretrained_WCTDECODER = use_pretrained_WCTDECODER
         self.config = config
         self.eps = eps
+        self.momentum = momentum
 
         set_seed(seed)
         self.seed = seed
@@ -153,6 +155,7 @@ class Trainer:
                         "do_decoder_train": self.do_decoder_train,
                         "use_pretrained_WCTDECODER": self.use_pretrained_WCTDECODER,
                         "eps": self.eps,
+                        "momentum": self.momentum,
                         "full_config": vars(self.config)
                         }
                 )
@@ -236,7 +239,7 @@ class Trainer:
                                  layer_depth=self.layer_depth,
                                  deep_learner=self.deep_learner,
                                  deep_dense=self.deep_dense,
-                                 eps=self.eps).to(self.device)
+                                 eps=self.eps, momentum=self.momentum).to(self.device)
 
         content_extractors = self.get_feature_extractor(self.content_layers_idx, device=self.device)
         style_extractors = self.get_feature_extractor(self.style_layers_idx, device=self.device)
@@ -401,7 +404,7 @@ class Trainer:
               f"\n Optim name: {self.optim_name}"
               f"\n Gradient threshold: {self.gradient_threshold}"
               f"\n Init epoch: {init_epoch}"
-              f"\n EPS: {self.eps}"
+              f"\n EPS | Momentum: {self.eps} | {self.momentum}"
               f"\n Do decoder training: {self.do_decoder_train}"
               f"\n Load pretrained WCT image recover: {self.use_pretrained_WCTDECODER}"
               f"\n Batch size: {self.per_device_batch_size}"

@@ -26,5 +26,6 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --gradient_threshold 5                        \
                    --use_pretrained_WCTDECODER                   \
                    --do_decoder_train                            \
-                   --eps 0.1
+                   --eps 0.1                                     \
+                   --momentum 0.4
 
