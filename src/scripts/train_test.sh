@@ -15,17 +15,10 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --crop_height 32                              \
                    --content_layers_idx 12 16 21                 \
                    --style_layers_idx 0 5 10 19 28               \
-                   --transformer_size 16                         \
-                   --CNN_layer_depth 2                           \
-                   --deep_learner                                \
                    --step_frequency 0.3                          \
                    --num_worker 2                                \
                    --do_eval_per_epoch                           \
-                   --deep_dense                                  \
                    --optim_name rmsprop momentum=0.8             \
                    --gradient_threshold 5                        \
                    --use_pretrained_WCTDECODER                   \
-                   --do_decoder_train                            \
-                   --eps 0.1                                     \
-                   --momentum 0.4
-
+                   --do_decoder_train

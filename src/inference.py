@@ -8,10 +8,9 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
 from src.models.generator import Encoder, Decoder
-from src.models.transformer import MTranspose
+from src.models.transformer import AdaIN
 from src.models.trainer import Trainer
 from src.data.dataloader import STDataloader
-from src.utils.image_plot import plot_image
 import torchvision.transforms as transforms
 
 
@@ -27,47 +26,42 @@ def parse_args(args):
     parser.add_argument('--test_batch_size', type=int, default=6, help="Batch size of test dataloader")
     parser.add_argument('--max_test_samples', type=int, default=None, help="Sample size of the test dataset")
     parser.add_argument('--seed', type=int, default=42, help="Seed for dataloader shuffle")
+    parser.add_argument('--alpha', type=float, default=1.0, help="alpha value for style and content adjustment")
+
 
     args = parser.parse_args(args)
 
     return args
 
 
-# def main(args):
-#     args = parse_args(args)
+def main(args):
+    args = parse_args(args)
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    encoder = Encoder().to(device)
+    decoder = Decoder().to(device)
+    checkpoint = torch.load(args.path_to_save_cpkt)
+    transformer = AdaIN().to(device)
+    decoder.load_state_dict(checkpoint['decoder_state_dict'])
+    transformer.load_state_dict(checkpoint['model_state_dict'])
+    decoder.eval()
+    transformer.eval()
+
+    _, result = Trainer.plot_comparison(encoder, decoder, transformer,
+                                         [r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\eval_dir\content\11.jpg"],
+                                        [r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\eval_dir\style\11.jpg"],
+                                        transforms.Compose([
+                                            transforms.Resize(300),
+                                            transforms.ToTensor(),
+                                            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                        ]),
+                                        device,
+                                        sleep=20)
+
+    # trans = transforms.ToPILImage()
+    # result = trans(result.squeeze())
+    # result.save("src/result_img.jpg")
 
 
-
-
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-encoder = Encoder().to(device)
-decoder = Decoder().to(device)
-checkpoint = torch.load(r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\models\checkpoints\training_session\trans_size32\TotalL_1906.774955900725_Content_88.17558837753158_Style_433.1581870414115\transformer9996.pth")
-transformer = MTranspose(matrix_size=checkpoint['trans_size'],
-                         layer_depth=checkpoint['layer_depth'],
-                         deep_learner=checkpoint['deep_learner'],
-                         deep_dense=False).to(device)
-decoder.load_state_dict(checkpoint['decoder_state_dict'])
-transformer.load_state_dict(checkpoint['model_state_dict'])
-decoder.eval()
-transformer.eval()
-
-_, result = Trainer.plot_comparison(encoder, decoder, transformer,
-                                     [r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\eval_dir\content\11.jpg"],
-                                    [r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\eval_dir\style\11.jpg"],
-                                    transforms.Compose([
-                                        transforms.Resize(256),
-                                        transforms.ToTensor(),
-                                        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                                    ]),
-                                    device,
-                                    sleep=20)
-
-# trans = transforms.ToPILImage()
-# result = trans(result.squeeze())
-# result.save("src/result_img.jpg")
-
-
-# if __name__ == "__main__":
-#     main(sys.argv[1:])
+if __name__ == "__main__":
+    main(sys.argv[1:])

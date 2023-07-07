@@ -8,53 +8,43 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 
 
-class VincentStyleLossToTarget(nn.Module):
-    def __init__(self, scale_factor=1e-4):
-        super(VincentStyleLossToTarget, self).__init__()
-        self.scale_factor = scale_factor  # Defaults tend to be very large, we scale to make them easier to work with
+class AdaINStyleLoss(nn.Module):
+    def __init__(self):
+        super(AdaINStyleLoss, self).__init__()
+        self.mse_loss = nn.MSELoss()
 
     @staticmethod
-    def calc_2_moments(x):
-        b, c, w, h = x.shape
-        x = x.reshape(b, c, w * h)  # b, c, n
-        mu = x.mean(dim=-1, keepdim=True)  # b, c, 1
-        cov = torch.bmm(x - mu, torch.transpose(x - mu, -1, -2))
-        return mu, cov
+    def calc_mean_std(feat, eps=1e-5):
+        # eps is a small value added to the variance to avoid divide-by-zero.
+        size = feat.size()
+        assert (len(size) == 4)
+        N, C = size[:2]
+        feat_var = feat.view(N, C, -1).var(dim=2) + eps
+        feat_std = feat_var.sqrt().view(N, C, 1, 1)
+        feat_mean = feat.view(N, C, -1).mean(dim=2).view(N, C, 1, 1)
+        return feat_mean, feat_std
 
-    @staticmethod
-    def matrix_diag(diagonal):
-        N = diagonal.shape[-1]
-        shape = diagonal.shape[:-1] + (N, N)
-        device, dtype = diagonal.device, diagonal.dtype
-        result = torch.zeros(shape, dtype=dtype, device=device)
-        indices = torch.arange(result.numel(), device=device).reshape(shape)
-        indices = indices.diagonal(dim1=-2, dim2=-1)
-        result.view(-1)[indices] = diagonal
-        return result
+    def calc_style_loss(self, input, target):
+        assert (input.size() == target.size())
+        # assert (target.requires_grad is False)
+        input_mean, input_std = self.calc_mean_std(input)
+        target_mean, target_std = self.calc_mean_std(target)
+        return self.mse_loss(input_mean, target_mean) + \
+               self.mse_loss(input_std, target_std)
 
-    def l2wass_dist(self, mean_stl, cov_stl, mean_synth, cov_synth):
-        # Calculate tr_cov and root_cov from mean_stl and cov_stl
-        eigvals, eigvects = torch.linalg.eigh(
-            cov_stl)  # eig returns complex tensors, I think eigh matches tf self_adjoint_eig
-        eigroot_mat = self.matrix_diag(torch.sqrt(eigvals.clip(0)))
-        root_cov_stl = torch.matmul(torch.matmul(eigvects, eigroot_mat), torch.transpose(eigvects, -1, -2))
-        tr_cov_stl = torch.sum(eigvals.clip(0), dim=1, keepdim=True)
+    def forward(self, input, target):
+        return self.calc_style_loss(input, target)
 
-        tr_cov_synth = torch.sum(torch.linalg.eigvalsh(cov_synth).clip(0), dim=1, keepdim=True)
-        mean_diff_squared = torch.mean((mean_synth - mean_stl) ** 2)
-        cov_prod = torch.matmul(torch.matmul(root_cov_stl, cov_synth), root_cov_stl)
-        var_overlap = torch.sum(torch.sqrt(torch.linalg.eigvalsh(cov_prod).clip(0.1)), dim=1,
-                                keepdim=True)  # .clip(0) meant errors getting eigvals
-        dist = mean_diff_squared + tr_cov_stl + tr_cov_synth - 2 * var_overlap
-        return dist
 
-    def forward(self, input_f, target_f):
+class AdaINContentLoss(nn.Module):
+    def __init__(self):
+        super(AdaINContentLoss, self).__init__()
+        self.mse_loss = nn.MSELoss()
 
-        mean_synth, cov_synth = self.calc_2_moments(input_f)  # input mean and cov
-        mean_stl, cov_stl = self.calc_2_moments(target_f)  # target mean and cov
-        loss = self.l2wass_dist(mean_stl, cov_stl, mean_synth, cov_synth)
-
-        return loss.mean() * self.scale_factor
+    def forward(self, input, target):
+        assert (input.size() == target.size())
+        # assert (target.requires_grad is False)
+        return self.mse_loss(input, target)
 
 
 class TVLoss(nn.Module):
@@ -65,7 +55,7 @@ class TVLoss(nn.Module):
         h_tv = torch.pow((image[:, :, 1:, :] - image[:, :, :height - 1, :]), 2).div(count_h)
         w_tv = torch.pow((image[:, :, :, 1:] - image[:, :, :, :width - 1]), 2).div(count_w)
         tv_loss = torch.sum(h_tv) + torch.sum(w_tv)
-        return (2 * tv_loss / batch_size)*1000
+        return (2 * tv_loss / batch_size)*100
 
     @staticmethod
     def _tensor_size(t):

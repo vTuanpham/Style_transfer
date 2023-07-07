@@ -1,8 +1,8 @@
 import os
 import sys
+sys.path.insert(0,r'./') #Add root directory here
 import argparse
 
-sys.path.insert(0,r'./') #Add root directory here
 import torchvision.transforms as transforms
 from src.data.dataloader import STDataloader
 from src.models.trainer import Trainer
@@ -43,28 +43,14 @@ def parse_args(args):
                         help="Whether to log weights to tracker")
     parser.add_argument('--resume_from_checkpoint', type=str, default=None,
                         help="If the training should continue from a checkpoint folder. (can be bool or string)")
-    parser.add_argument('--login_key', type=str, default=None,
-                        help="Login key for wandb")
     parser.add_argument('--plot_per_epoch', action='store_true',
                         help="Whether to plot comparison per epoch.")
     parser.add_argument('--do_eval_per_epoch', action='store_true',
                         help="Whether to run evaluate per epoch.")
-    parser.add_argument('--transformer_size', type=int, default=32,
-                        help="Size of the transformation matrix")
-    parser.add_argument('--CNN_layer_depth', type=int, default=1,
-                        help="Depth of CNN layer")
-    parser.add_argument('--eps', type=float, default=1e-5,
-                        help="Epsilon value for Instance Norm")
-    parser.add_argument('--momentum', type=float, default=0.5,
-                        help="Momentum for Instance Norm")
-    parser.add_argument('--deep_learner', action='store_true',
-                        help="Whether to enable deepest layer for abstract learning.")
     parser.add_argument('--do_decoder_train', action='store_true',
                         help="Whether to enable decoder training to expand model capacity.")
     parser.add_argument('--use_pretrained_WCTDECODER', action='store_true',
                         help="Whether to load pretrained WCT decoder that were trained on image recovery.")
-    parser.add_argument('--deep_dense', action='store_true',
-                        help="Whether to enable deepest dense layer for bottleneck")
 
     # Optimizer
     parser.add_argument('--vgg_model_type', type=str, default='19', help=(
@@ -86,22 +72,12 @@ def parse_args(args):
                         help="Initial gamma to use.")
     parser.add_argument('--delta', type=float, default=5e-5,
                         help="Initial delta to use.")
-    parser.add_argument('--weight_decay', type=float, default=0.3,
-                        help="Weight decay to use.")
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
-                        help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument('--content_layers_idx', nargs='+', type=int, default=[8, 11, 13],
                         help="Vgg layers to compute content loss")
     parser.add_argument('--style_layers_idx', nargs='+', type=int, default=[1, 3, 6, 8],
                         help="Vgg layers to compute style loss")
 
     args = parser.parse_args(args)
-
-    # # validate and convert the input argument
-    # try:
-    #     args.checkpointing_steps = int(args.checkpointing_steps)  # try to convert to int
-    # except:
-    #     args.checkpointing_steps = args.checkpointing_steps  # if conversion fails, assume it's a string
 
     # Sanity check
     assert os.path.isdir(args.output_dir), "Invalid output dir path!"
@@ -159,19 +135,12 @@ def main(args):
         "resume_from_checkpoint": args.resume_from_checkpoint,
         "with_tracking": args.with_tracking,
         "num_train_epochs": args.num_train_epochs,
-        "weight_decay": args.weight_decay,
         "per_device_batch_size":dataloaders.batch_size,
-        "gradient_accumulation_steps": args.gradient_accumulation_steps,
         "do_eval_per_epoch": args.do_eval_per_epoch,
         "plot_per_epoch": args.plot_per_epoch,
         "warm_up_epoch": args.warm_up_epoch,
         "learning_rate": args.learning_rate,
         "vgg_model_type": args.vgg_model_type,
-        "transformer_size": args.transformer_size,
-        "layer_depth": args.CNN_layer_depth,
-        "deep_learner": args.deep_learner,
-        "deep_dense": args.deep_dense,
-        "login_key": args.login_key,
         "seed": args.seed,
         "alpha": args.alpha,
         "beta": args.beta,
@@ -182,8 +151,6 @@ def main(args):
         "log_weights_cpkt": args.log_weights_cpkt,
         "step_frequency": args.step_frequency,
         "optim_name": args.optim_name,
-        "eps": args.eps,
-        "momentum": args.momentum,
         "gradient_threshold": args.gradient_threshold,
         "do_decoder_train": args.do_decoder_train,
         "use_pretrained_WCTDECODER": args.use_pretrained_WCTDECODER,
