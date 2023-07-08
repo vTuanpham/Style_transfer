@@ -58,6 +58,7 @@ class Trainer:
                  do_decoder_train: bool = False,
                  use_pretrained_WCTDECODER: bool = False,
                  delta: float = 2,
+                 eps: float = 1e-5,
                  step_frequency: float = 0.5,
                  gradient_threshold: float = None,
                  config: Namespace = None,
@@ -73,6 +74,7 @@ class Trainer:
         self.beta = beta
         self.gamma = gamma
         self.delta = delta
+        self.eps = eps
 
         self.vgg_model_type = vgg_model_type
         self.learning_rate = learning_rate
@@ -214,7 +216,7 @@ class Trainer:
         decoder = Decoder(use_pretrained_WCT=self.use_pretrained_WCTDECODER if self.resume_from_checkpoint is None else False,
                           do_train=self.do_decoder_train).to(self.device)
 
-        transformer = AdaIN().to(self.device)
+        transformer = AdaIN(eps=self.eps).to(self.device)
 
         content_extractors = self.get_feature_extractor(self.content_layers_idx, device=self.device)
         style_extractors = self.get_feature_extractor(self.style_layers_idx, device=self.device)
@@ -379,6 +381,7 @@ class Trainer:
               f"\n Optim name: {self.optim_name}"
               f"\n Gradient threshold: {self.gradient_threshold}"
               f"\n Init epoch: {init_epoch}"
+              f"\n Eps: {self.eps}"
               f"\n Do decoder training: {self.do_decoder_train}"
               f"\n Load pretrained WCT image recover: {self.use_pretrained_WCTDECODER}"
               f"\n Batch size: {self.per_device_batch_size}"

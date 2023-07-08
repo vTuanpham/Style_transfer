@@ -64,14 +64,16 @@ def parse_args(args):
                         help="Gradient threshold for clipping (use for exploding gradient) (recommended range 1-10)")
     parser.add_argument('--warm_up_epoch', type=int, default=1,
                         help="Warmup period")
-    parser.add_argument('--alpha', type=float, default=5e-5,
+    parser.add_argument('--alpha', type=float, default=1,
                         help="Initial alpha to use.")
-    parser.add_argument('--beta', type=float, default=5e-5,
+    parser.add_argument('--beta', type=float, default=1,
                         help="Initial beta to use.")
-    parser.add_argument('--gamma', type=float, default=5e-5,
+    parser.add_argument('--gamma', type=float, default=1,
                         help="Initial gamma to use.")
-    parser.add_argument('--delta', type=float, default=5e-5,
+    parser.add_argument('--delta', type=float, default=1,
                         help="Initial delta to use.")
+    parser.add_argument('--eps', type=float, default=1e-5,
+                        help="Eps value for AdaIN.")
     parser.add_argument('--content_layers_idx', nargs='+', type=int, default=[8, 11, 13],
                         help="Vgg layers to compute content loss")
     parser.add_argument('--style_layers_idx', nargs='+', type=int, default=[1, 3, 6, 8],
@@ -146,6 +148,7 @@ def main(args):
         "beta": args.beta,
         "gamma": args.gamma,
         "delta": args.delta,
+        "eps": args.eps,
         "content_layers_idx": args.content_layers_idx,
         "style_layers_idx": args.style_layers_idx,
         "log_weights_cpkt": args.log_weights_cpkt,

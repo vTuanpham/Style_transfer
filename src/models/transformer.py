@@ -4,14 +4,16 @@ import torch.nn as nn
 
 
 class AdaIN(nn.Module):
-    def __init__(self):
+    def __init__(self, eps: float=1e-5):
         super(AdaIN, self).__init__()
+        self.eps = eps
 
     @staticmethod
     def calc_mean_std(feat, eps=1e-5):
         # eps is a small value added to the variance to avoid divide-by-zero.
         size = feat.size()
         assert (len(size) == 4)
+        assert 0 < eps < 1.0
         N, C = size[:2]
         feat_var = feat.view(N, C, -1).var(dim=2) + eps
         feat_std = feat_var.sqrt().view(N, C, 1, 1)
@@ -21,8 +23,8 @@ class AdaIN(nn.Module):
     def adaptive_instance_normalization(self, content_feat, style_feat):
         assert (content_feat.size()[:2] == style_feat.size()[:2])
         size = content_feat.size()
-        style_mean, style_std = self.calc_mean_std(style_feat)
-        content_mean, content_std = self.calc_mean_std(content_feat)
+        style_mean, style_std = self.calc_mean_std(style_feat, self.eps)
+        content_mean, content_std = self.calc_mean_std(content_feat, self.eps)
 
         normalized_feat = (content_feat - content_mean.expand(
             size)) / content_std.expand(size)
