@@ -447,7 +447,7 @@ class Trainer:
 
                 # Backpropagation and optimization
                 transformer_optimizer.zero_grad()
-                total_loss.backward(retain_graph=True)
+                total_loss.backward()
                 transformer_optimizer.step()
 
                 completed_step += step
