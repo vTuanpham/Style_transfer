@@ -7,7 +7,7 @@ import torchvision.transforms as transforms
 from src.data.dataloader import STDataloader
 from src.models.trainer import Trainer
 from src.utils.custom_transform import RGBToGrayscaleStacked, AddGaussianNoise
-from src.utils.utils import ParseKwargsOptim, clear_cuda_cache
+from src.utils.utils import ParseKwargsOptim, clear_cuda_cache, set_seed
 
 
 def parse_args(args):
@@ -96,6 +96,7 @@ def parse_args(args):
 def main(args):
     args = parse_args(args)
     clear_cuda_cache()
+    set_seed(args.seed)
 
     dataloader_args = {
         "content_datapath": args.content_datapath,
@@ -126,7 +127,6 @@ def main(args):
         ]),
         "max_style_train_samples": args.max_style_train_samples,
         "max_content_train_samples": args.max_content_train_samples,
-        "seed": args.seed,
         "num_worker": args.num_worker
     }
     dataloaders = STDataloader(**dataloader_args)

@@ -4,6 +4,7 @@ import warnings
 import math
 from typing import List, Dict
 
+import numpy as np
 import PIL.Image
 from PIL import Image, ImageFile
 PIL.Image.MAX_IMAGE_PIXELS = 933120000
@@ -124,6 +125,12 @@ class STDataloader:
         return {"train":self.get_dataloader(train_dataset, shuffle_flag=True, batch_size=self.batch_size),
                 "eval": self.get_dataloader(eval_dataset, shuffle_flag=False, batch_size=self.eval_batch_size)}
 
+    @staticmethod
+    def seed_worker(worker_id):
+        worker_seed = torch.initial_seed() % 2 ** 32
+        np.random.seed(worker_seed)
+        random.seed(worker_seed)
+
     def get_dataloader(self, dataset, shuffle_flag: bool = False, batch_size: int = 1) -> DataLoader:
         sampler = RandomSampler(data_source=dataset, generator=self.generator) if shuffle_flag else \
             SequentialSampler(dataset)
@@ -131,7 +138,9 @@ class STDataloader:
                           sampler=sampler,
                           batch_size=batch_size,
                           drop_last=True,
-                          num_workers=self.num_worker)
+                          num_workers=self.num_worker,
+                          worker_init_fn=self.seed_worker,
+                          pin_memory=torch.cuda.is_available())
 
 
 if __name__ == "__main__":

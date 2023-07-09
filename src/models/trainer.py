@@ -29,7 +29,6 @@ from src.models.losses import AdaINStyleLoss, AdaINContentLoss, TVLoss, HistLoss
 from src.models.generator import Encoder, Decoder
 from src.models.transformer import AdaIN
 from src.utils.image_plot import plot_image
-from src.utils.utils import set_seed
 
 
 PRJ_NAME = "Style_transfer"
@@ -96,7 +95,7 @@ class Trainer:
         self.do_eval_per_epoch = do_eval_per_epoch
         self.config = config
 
-        set_seed(seed)
+        # set_seed(seed)
         self.seed = seed
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -448,7 +447,7 @@ class Trainer:
 
                 # Backpropagation and optimization
                 transformer_optimizer.zero_grad()
-                total_loss.backward()
+                total_loss.backward(retain_graph=True)
                 transformer_optimizer.step()
 
                 completed_step += step
@@ -483,9 +482,15 @@ class Trainer:
             avg_epoch_hist_loss = total_epoch_hist_loss / len(self.dataloaders['train'])
 
             loss_list.append(avg_epoch_total_loss)
+
+            epss = transformer.get_current_eps()
             # Print the loss for monitoring
             print(f"\n --- Training log --- \n")
             print(f"   Epoch [{epoch + 1}/{self.num_train_epochs}]"
+                  f"\n EPS: style:{epss[0]} "
+                  f"\n      {transformer.style_eps}"
+                  f"\n      content:{epss[1]} "
+                  f"\n      {transformer.content_eps}"
                   f"\n Total Loss: {avg_epoch_total_loss}"
                   f"\n Loss content: {avg_epoch_content_loss} | Contributed content loss: {avg_epoch_content_loss*self.alpha}"
                   f"\n Loss style: {avg_epoch_style_loss} | Contributed style loss: {avg_epoch_style_loss*self.beta}"
@@ -506,7 +511,7 @@ class Trainer:
                     plot, _ = self.plot_comparison(encoder, decoder, transformer,
                                                  content_img_paths, style_img_paths,
                                                  transforms.Compose([
-                                                     transforms.Resize(300),
+                                                     transforms.Resize(256),
                                                      transforms.ToTensor(),
                                                      norm
                                                  ]), self.device, plot=self.plot_per_epoch)
