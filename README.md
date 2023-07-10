@@ -27,11 +27,14 @@
   ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/ebc3b5e4-9b27-4e78-b0cf-261562fb764b)
 
 ## Training
+  ```
+  git clone "https://github.com/vTuanpham/Style_transfer.git"
+  ```
   Install dependencies first, this might take awhile..
   ```
   pip install -r requirements.txt
   ```
-  To train, modified the script in the src/scripts folder
+  To train, modify the script in the src/scripts folder
   ```
   bash src/scripts/train.sh 
   ```
@@ -42,15 +45,18 @@
     ### Auto log saved checkpoint to wandb with wandb artifacts
     * ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/a3838187-fb5a-4983-bce7-6ee8a23f5603)
 
+
 ## Test
+
   #### Modified the alpha value (higher mean higher emphasis on the style)
   ```
   python src/inference.py --path_to_save_cpkt "" --alpha 
   ```
 
-#### Leave a star ⭐ if you find this useful!
+### Leave a star ⭐ if you find this useful!
 
-### TO DO:
+
+### TODO:
   * Include model checkpoint
   * Easier inference
   * Add docs on all args for training
