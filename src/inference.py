@@ -6,6 +6,8 @@ import argparse
 from random import random
 from PIL import Image
 import matplotlib.pyplot as plt
+from collections import OrderedDict
+
 import numpy as np
 from src.models.generator import Encoder, Decoder
 from src.models.transformer import AdaIN
@@ -28,7 +30,6 @@ def parse_args(args):
     parser.add_argument('--seed', type=int, default=42, help="Seed for dataloader shuffle")
     parser.add_argument('--alpha', type=float, default=1.0, help="alpha value for style and content adjustment")
 
-
     args = parser.parse_args(args)
 
     return args
@@ -41,26 +42,30 @@ def main(args):
     encoder = Encoder().to(device)
     decoder = Decoder().to(device)
     checkpoint = torch.load(args.path_to_save_cpkt)
+    decoder_cpkt = torch.load(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\models\checkpoints\training_session\AdaIN\decoder.pth')
+
     transformer = AdaIN().to(device)
-    decoder.load_state_dict(checkpoint['decoder_state_dict'])
+    decoder.decoder.load_state_dict(decoder_cpkt)
     transformer.load_state_dict(checkpoint['model_state_dict'])
     decoder.eval()
     transformer.eval()
 
     _, result = Trainer.plot_comparison(encoder, decoder, transformer,
-                                         [r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\eval_dir\content\11.jpg"],
-                                        [r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\eval_dir\style\11.jpg"],
+                                         [r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\359733373_638860051290066_4793153396181217139_n.png"],
+                                        [r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\painting.jpg"],
                                         transforms.Compose([
-                                            transforms.Resize(300),
-                                            transforms.ToTensor(),
-                                            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                            transforms.Resize(450),
+                                            transforms.ToTensor()
                                         ]),
                                         device,
-                                        sleep=20)
+                                        sleep=20, alpha=args.alpha)
 
-    # trans = transforms.ToPILImage()
-    # result = trans(result.squeeze())
-    # result.save("src/result_img.jpg")
+    image3_np = result.squeeze().permute(1, 2, 0).detach().cpu() # Adjust dimensions as per your tensor shape
+    image3_np = np.interp(image3_np, (image3_np.min(), image3_np.max()), (0, 1))
+
+    result = Image.fromarray((image3_np * 255).astype(np.uint8))
+
+    result.save("src/result_img.jpg")
 
 
 if __name__ == "__main__":

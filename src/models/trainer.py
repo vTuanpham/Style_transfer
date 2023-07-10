@@ -272,15 +272,6 @@ class Trainer:
                                                        kwargs=self.optim_name
                                                        )
 
-        # Define the learning rate scheduler
-        def lr_lambda(epoch, warm_up_epoch):
-            if epoch < warm_up_epoch:
-                return epoch / warm_up_epoch
-            else:
-                return 0.1 ** ((epoch - warm_up_epoch) / 10)
-
-        scheduler = lr_scheduler.LambdaLR(transformer_optimizer,
-                                          lr_lambda=lambda epoch: lr_lambda(epoch, self.warm_up_epoch))
 
         norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
@@ -362,6 +353,10 @@ class Trainer:
             except KeyError:
                 warnings.warn("Checkpoint missing train process info!")
                 pass
+
+        scheduler = lr_scheduler.CosineAnnealingLR(transformer_optimizer,
+                                            T_max=len(self.dataloaders['train']) * (self.num_train_epochs-init_epoch),
+                                            last_epoch=last_session_epoch if self.resume_from_checkpoint else -1)
 
         # Calculate how often should we update the lr
         total_steps = len(self.dataloaders['train']) * (self.num_train_epochs-init_epoch)
@@ -457,6 +452,8 @@ class Trainer:
                 total_epoch_var_loss += float(variation_loss.item())
                 total_epoch_hist_loss += float(histogram_loss.item())
 
+                epss = transformer.get_current_eps()
+
                 if self.with_tracking:
                     rate = progress_bar.format_dict["rate"]
                     remaining = (progress_bar.total - progress_bar.n) / rate if rate and progress_bar.total else 0
@@ -466,7 +463,9 @@ class Trainer:
                                     "Loss_style_contributed_batch": loss_style * self.beta,
                                     "Loss_variation_contributed_batch": variation_loss * self.gamma,
                                     "Loss_histogram_contributed_batch": histogram_loss * self.delta,
-                                    "Total_loss_batch": float(total_loss.item())}, step=completed_step)
+                                    "Total_loss_batch": float(total_loss.item()),
+                                    "Style_EPS": epss[0].item(),
+                                    "Content_EPS": epss[1].item()}, step=completed_step)
 
                 # Update learning rate
                 scheduler_count += 1
@@ -487,10 +486,10 @@ class Trainer:
             # Print the loss for monitoring
             print(f"\n --- Training log --- \n")
             print(f"   Epoch [{epoch + 1}/{self.num_train_epochs}]"
-                  f"\n EPS: style:{epss[0]} "
-                  f"\n      {transformer.style_eps}"
-                  f"\n      content:{epss[1]} "
-                  f"\n      {transformer.content_eps}"
+                  f"\n EPS: Style: {epss[0].item()} "
+                  f"\n      Actual eps style weight: {transformer.style_eps.item()}"
+                  f"\n      Content: {epss[1].item()} "
+                  f"\n      Actual eps content weight:{transformer.content_eps.item()}"
                   f"\n Total Loss: {avg_epoch_total_loss}"
                   f"\n Loss content: {avg_epoch_content_loss} | Contributed content loss: {avg_epoch_content_loss*self.alpha}"
                   f"\n Loss style: {avg_epoch_style_loss} | Contributed style loss: {avg_epoch_style_loss*self.beta}"
@@ -512,8 +511,7 @@ class Trainer:
                                                  content_img_paths, style_img_paths,
                                                  transforms.Compose([
                                                      transforms.Resize(256),
-                                                     transforms.ToTensor(),
-                                                     norm
+                                                     transforms.ToTensor()
                                                  ]), self.device, plot=self.plot_per_epoch)
                     try:
                         try:
