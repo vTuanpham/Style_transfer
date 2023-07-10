@@ -1,13 +1,12 @@
 import sys
 sys.path.insert(0,r'./')
 import numpy as np
+from PIL import Image
 from typing import Tuple
 from functools import reduce
-from PIL import Image
 
 import torch
 import torch.nn as nn
-import torchvision.models as models
 import torchvision.transforms as transforms
 
 
@@ -41,29 +40,42 @@ class SymmetricPadding2D(nn.Module):
 
 
 class Encoder(nn.Module):
-	def __init__(self):
+	def __init__ (self):
 		super(Encoder, self).__init__()
 		self.encode = nn.Sequential( # Sequential,
-			nn.Conv2d(3,3,(1, 1)),
-			SymmetricPadding2D((1, 1, 1, 1)),
-			nn.Conv2d(3,64,(3, 3)),
-			nn.ReLU(),
-			SymmetricPadding2D((1, 1, 1, 1)),
-			nn.Conv2d(64,64,(3, 3)),
-			nn.ReLU(),
-			nn.MaxPool2d((2, 2),(2, 2),(0, 0),ceil_mode=True),
-			SymmetricPadding2D((1, 1, 1, 1)),
-			nn.Conv2d(64,128,(3, 3)),
-			nn.ReLU(),
-			SymmetricPadding2D((1, 1, 1, 1)),
-			nn.Conv2d(128,128,(3, 3)),
-			nn.ReLU(),
-			nn.MaxPool2d((2, 2),(2, 2),(0, 0),ceil_mode=True),
-			SymmetricPadding2D((1, 1, 1, 1)),
-			nn.Conv2d(128,256,(3, 3)),
-			nn.ReLU(),
+				nn.Conv2d(3,3,(1, 1)),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(3,64,(3, 3)),
+				nn.ReLU(),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(64,64,(3, 3)),
+				nn.ReLU(),
+				nn.MaxPool2d((2, 2),(2, 2),(0, 0),ceil_mode=True),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(64,128,(3, 3)),
+				nn.ReLU(),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(128,128,(3, 3)),
+				nn.ReLU(),
+				nn.MaxPool2d((2, 2),(2, 2),(0, 0),ceil_mode=True),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(128,256,(3, 3)),
+				nn.ReLU(),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(256,256,(3, 3)),
+				nn.ReLU(),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(256,256,(3, 3)),
+				nn.ReLU(),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(256,256,(3, 3)),
+				nn.ReLU(),
+				nn.MaxPool2d((2, 2),(2, 2),(0, 0),ceil_mode=True),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(256,512,(3, 3)),
+				nn.ReLU(),
 		)
-		self.encode.load_state_dict(torch.load(r'./src/models/checkpoints/WCT_encoder_decoder/vgg_normalised_conv3_1.pth'))
+		self.encode.load_state_dict(torch.load(r'./src/models/checkpoints/WCT_encoder_decoder/vgg_normalised_conv4_1.pth'))
 
 	def forward(self, x):
 		out = self.encode(x)
@@ -73,27 +85,40 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
 	def __init__(self, use_pretrained_WCT: bool=False, do_train: bool=False):
 		super(Decoder, self).__init__()
-		self.decoder = nn.Sequential(  # Sequential,
-			SymmetricPadding2D((1, 1, 1, 1)),
-			nn.Conv2d(256, 128, (3, 3)),
-			nn.ReLU(),
-			nn.UpsamplingNearest2d(scale_factor=2),
-			SymmetricPadding2D((1, 1, 1, 1)),
-			nn.Conv2d(128, 128, (3, 3)),
-			nn.ReLU(),
-			SymmetricPadding2D((1, 1, 1, 1)),
-			nn.Conv2d(128, 64, (3, 3)),
-			nn.ReLU(),
-			nn.UpsamplingNearest2d(scale_factor=2),
-			SymmetricPadding2D((1, 1, 1, 1)),
-			nn.Conv2d(64, 64, (3, 3)),
-			nn.ReLU(),
-			SymmetricPadding2D((1, 1, 1, 1)),
-			nn.Conv2d(64, 3, (3, 3)),
+		self.decoder = nn.Sequential( # Sequential,
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(512,256,(3, 3)),
+				nn.ReLU(),
+				nn.UpsamplingNearest2d(scale_factor=2),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(256,256,(3, 3)),
+				nn.ReLU(),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(256,256,(3, 3)),
+				nn.ReLU(),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(256,256,(3, 3)),
+				nn.ReLU(),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(256,128,(3, 3)),
+				nn.ReLU(),
+				nn.UpsamplingNearest2d(scale_factor=2),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(128,128,(3, 3)),
+				nn.ReLU(),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(128,64,(3, 3)),
+				nn.ReLU(),
+				nn.UpsamplingNearest2d(scale_factor=2),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(64,64,(3, 3)),
+				nn.ReLU(),
+				SymmetricPadding2D((1, 1, 1, 1)),
+				nn.Conv2d(64,3,(3, 3)),
 		)
 		if use_pretrained_WCT:
 			print("\n Using WCT pretrained image recover...")
-			self.decoder.load_state_dict(torch.load(r"./src/models/checkpoints/WCT_encoder_decoder/feature_invertor_conv3_1.pth"))
+			self.decoder.load_state_dict(torch.load(r"./src/models/checkpoints/WCT_encoder_decoder/feature_invertor_conv4_1.pth"))
 		if do_train:
 			print("\n Enabling Decoder training...")
 			self.decoder.train()

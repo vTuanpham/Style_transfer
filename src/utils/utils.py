@@ -1,4 +1,5 @@
 import sys
+import os
 sys.path.insert(0,r'./')
 import random
 import torch
@@ -47,16 +48,22 @@ class ParseKwargsOptim(argparse.Action):
                     try:
                         value = float(value)
                     except ValueError:
-                        pass  # Value cannot be converted, keep it as a string
+                        # Try converting value to tuple of floats or ints
+                        try:
+                            value = tuple(map(float, value.split(',')))
+                        except ValueError:
+                            pass  # Value cannot be converted, keep it as a string
 
                 kwargs_dict[key] = value
 
 
 def set_seed(value):
     print("\n Random Seed: ", value)
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     random.seed(value)
     torch.manual_seed(value)
     torch.cuda.manual_seed_all(value)
+    torch.use_deterministic_algorithms(True, warn_only=True)
     np.random.seed(value)
 
 

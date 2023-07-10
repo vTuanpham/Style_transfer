@@ -7,6 +7,6 @@ src/data/*
 !src/data/anotherdummy
 !src/data/eval_dir
 
-src/models/checkpoints/
-!src/models/WCT_encoder_decoder
+src/models/checkpoints/*
+!src/models/checkpoints/WCT_encoder_decoder
 

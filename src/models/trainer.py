@@ -1,3 +1,4 @@
+import datetime
 import io
 import random
 import sys
@@ -5,7 +6,7 @@ import os
 import time
 import math
 import warnings
-
+from argparse import Namespace
 sys.path.insert(0,r'./') #Add root directory here
 
 import torch
@@ -23,13 +24,11 @@ from typing import List
 from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 
-from src.models.losses import VincentStyleLossToTarget, TVLoss, HistLoss
-from torch.nn import MSELoss as ContentLoss
+from src.models.losses import AdaINStyleLoss, AdaINContentLoss, TVLoss, HistLoss
 
 from src.models.generator import Encoder, Decoder
-from src.models.transformer import MTranspose
+from src.models.transformer import AdaIN
 from src.utils.image_plot import plot_image
-from src.utils.utils import set_seed
 
 
 PRJ_NAME = "Style_transfer"
@@ -40,14 +39,11 @@ class Trainer:
                  dataloaders,
                  output_dir: str,
                  num_train_epochs: int,
-                 weight_decay,
                  per_device_batch_size: int,
-                 gradient_accumulation_steps: int,
                  learning_rate: float,
                  alpha: float,
                  beta: float,
                  gamma: float,
-                 login_key: str,
                  seed: int = 42,
                  warm_up_epoch: int = 1,
                  do_eval_per_epoch: bool = True,
@@ -61,12 +57,10 @@ class Trainer:
                  do_decoder_train: bool = False,
                  use_pretrained_WCTDECODER: bool = False,
                  delta: float = 2,
+                 eps: float = 1e-5,
                  step_frequency: float = 0.5,
-                 transformer_size: int = 32,
                  gradient_threshold: float = None,
-                 layer_depth: int = 1,
-                 deep_learner: bool = False,
-                 deep_dense: bool = False,
+                 config: Namespace = None,
                  content_layers_idx: List[int] = [12, 16, 21],
                  style_layers_idx: List[int] = [0, 5, 10, 19, 28]
                  ):
@@ -79,36 +73,35 @@ class Trainer:
         self.beta = beta
         self.gamma = gamma
         self.delta = delta
-        self.with_tracking = with_tracking
-        self.log_weights_cpkt = log_weights_cpkt
-        self.plot_per_epoch = plot_per_epoch
-        self.save_best = save_best
-        self.login_key = login_key if with_tracking else None
+        self.eps = eps
+
         self.vgg_model_type = vgg_model_type
-        self.resume_from_checkpoint = resume_from_checkpoint
         self.learning_rate = learning_rate
         self.content_layers_idx = content_layers_idx
         self.style_layers_idx = style_layers_idx
         self.num_train_epochs = num_train_epochs
-        self.transformer_size = transformer_size
-        self.layer_depth = layer_depth
-        self.deep_learner = deep_learner
-        self.deep_dense = deep_dense
         self.warm_up_epoch = warm_up_epoch
         self.step_frequency = step_frequency
-        self.do_eval_per_epoch = do_eval_per_epoch
         self.optim_name = optim_name
         self.gradient_threshold = gradient_threshold
         self.do_decoder_train = do_decoder_train
         self.use_pretrained_WCTDECODER = use_pretrained_WCTDECODER
 
-        set_seed(seed)
+        self.with_tracking = with_tracking
+        self.log_weights_cpkt = log_weights_cpkt
+        self.plot_per_epoch = plot_per_epoch
+        self.save_best = save_best
+        self.resume_from_checkpoint = resume_from_checkpoint
+        self.do_eval_per_epoch = do_eval_per_epoch
+        self.config = config
+
+        # set_seed(seed)
         self.seed = seed
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self.variation_loss = TVLoss()
-        self.style_loss = VincentStyleLossToTarget()
-        self.content_loss = ContentLoss()
+        self.style_loss = AdaINStyleLoss()
+        self.content_loss = AdaINContentLoss()
         self.hist_loss = HistLoss()
 
         if self.with_tracking:
@@ -133,10 +126,6 @@ class Trainer:
                         "style_layers_idx": self.style_layers_idx,
                         "device": self.device,
                         "batch_size": self.per_device_batch_size,
-                        "layer_depth": self.layer_depth,
-                        "deep_learner": self.deep_learner,
-                        "deep_dense": self.deep_dense,
-                        "transformer_size": self.transformer_size,
                         "step_frequency": self.step_frequency,
                         "num_batch": len(self.dataloaders['train']),
                         "num_exampes": len(self.dataloaders['train'].dataset),
@@ -146,7 +135,8 @@ class Trainer:
                         "seed": self.seed,
                         "warmup_epochs": self.warm_up_epoch,
                         "do_decoder_train": self.do_decoder_train,
-                        "use_pretrained_WCTDECODER": self.use_pretrained_WCTDECODER
+                        "use_pretrained_WCTDECODER": self.use_pretrained_WCTDECODER,
+                        "full_config": vars(self.config)
                         }
                 )
                 if self.log_weights_cpkt:
@@ -225,10 +215,7 @@ class Trainer:
         decoder = Decoder(use_pretrained_WCT=self.use_pretrained_WCTDECODER if self.resume_from_checkpoint is None else False,
                           do_train=self.do_decoder_train).to(self.device)
 
-        transformer = MTranspose(matrix_size=self.transformer_size,
-                                 layer_depth=self.layer_depth,
-                                 deep_learner=self.deep_learner,
-                                 deep_dense=self.deep_dense).to(self.device)
+        transformer = AdaIN(eps=self.eps).to(self.device)
 
         content_extractors = self.get_feature_extractor(self.content_layers_idx, device=self.device)
         style_extractors = self.get_feature_extractor(self.style_layers_idx, device=self.device)
@@ -285,15 +272,6 @@ class Trainer:
                                                        kwargs=self.optim_name
                                                        )
 
-        # Define the learning rate scheduler
-        def lr_lambda(epoch, warm_up_epoch):
-            if epoch < warm_up_epoch:
-                return epoch / warm_up_epoch
-            else:
-                return 0.1 ** ((epoch - warm_up_epoch) / 10)
-
-        scheduler = lr_scheduler.LambdaLR(transformer_optimizer,
-                                          lr_lambda=lambda epoch: lr_lambda(epoch, self.warm_up_epoch))
 
         norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
@@ -376,6 +354,10 @@ class Trainer:
                 warnings.warn("Checkpoint missing train process info!")
                 pass
 
+        scheduler = lr_scheduler.CosineAnnealingLR(transformer_optimizer,
+                                            T_max=len(self.dataloaders['train']) * (self.num_train_epochs-init_epoch),
+                                            last_epoch=last_session_epoch if self.resume_from_checkpoint else -1)
+
         # Calculate how often should we update the lr
         total_steps = len(self.dataloaders['train']) * (self.num_train_epochs-init_epoch)
         steps_per_epoch = len(self.dataloaders['train'])
@@ -393,6 +375,7 @@ class Trainer:
               f"\n Optim name: {self.optim_name}"
               f"\n Gradient threshold: {self.gradient_threshold}"
               f"\n Init epoch: {init_epoch}"
+              f"\n Eps: {self.eps}"
               f"\n Do decoder training: {self.do_decoder_train}"
               f"\n Load pretrained WCT image recover: {self.use_pretrained_WCTDECODER}"
               f"\n Batch size: {self.per_device_batch_size}"
@@ -400,26 +383,21 @@ class Trainer:
               f"\n Total number of examples: {len(self.dataloaders['train'].dataset)}"
               f"\n Total number of steps: {total_steps}"
               f"\n Number of steps before updating the lr: {scheduler_steps}"
-              f"\n Transformation matrix size: {self.transformer_size}"
               f"\n Content layers loss idx: {self.content_layers_idx}"
               f"\n Style layers loss idx: {self.style_layers_idx}"
-              f"\n Depth of CNN layer: {self.layer_depth}"
-              f"\n Deep learner: {self.deep_learner}"
               f"\n Device to train: {self.device}\n")
 
         # Training loop
-
         progress_bar = tqdm(range(init_epoch, self.num_train_epochs), desc="Training progress",
                             colour='green', position=0, leave=True)
-
         for epoch in progress_bar:
             total_epoch_loss, total_epoch_content_loss = 0, 0
             total_epoch_style_loss, total_epoch_var_loss = 0, 0
             total_epoch_hist_loss = 0
             transformer.train()
             if self.do_decoder_train: decoder.train()
-            for step, batch in enumerate(tqdm(self.dataloaders['train'], colour='blue', desc="Training batch progress",
-                                              position=1, leave=False)):
+            for step, batch in enumerate(tqdm(self.dataloaders['train'], colour='blue',
+                                              desc="Training batch progress", position=1, leave=False)):
                 content_imgs = batch['content_image'].to(self.device)
                 style_imgs = batch['style_image'].to(self.device)
 
@@ -428,11 +406,12 @@ class Trainer:
                 encode_Sfeatures = encoder(style_imgs)
 
                 transformed_features = transformer(encode_Cfeatures, encode_Sfeatures)
+                transformed_features = 1.0 * transformed_features + (1 - 1.0) * encode_Cfeatures
 
                 # Decode features
                 decode_imgs = decoder(transformed_features)
 
-                # Normalize
+                # Normalize output
                 content_imgs = norm(content_imgs)
                 style_imgs = norm(style_imgs)
                 decode_imgs = norm(decode_imgs)
@@ -473,6 +452,8 @@ class Trainer:
                 total_epoch_var_loss += float(variation_loss.item())
                 total_epoch_hist_loss += float(histogram_loss.item())
 
+                epss = transformer.get_current_eps()
+
                 if self.with_tracking:
                     rate = progress_bar.format_dict["rate"]
                     remaining = (progress_bar.total - progress_bar.n) / rate if rate and progress_bar.total else 0
@@ -482,7 +463,9 @@ class Trainer:
                                     "Loss_style_contributed_batch": loss_style * self.beta,
                                     "Loss_variation_contributed_batch": variation_loss * self.gamma,
                                     "Loss_histogram_contributed_batch": histogram_loss * self.delta,
-                                    "Total_loss_batch": float(total_loss.item())}, step=completed_step)
+                                    "Total_loss_batch": float(total_loss.item()),
+                                    "Style_EPS": epss[0].item(),
+                                    "Content_EPS": epss[1].item()}, step=completed_step)
 
                 # Update learning rate
                 scheduler_count += 1
@@ -498,9 +481,15 @@ class Trainer:
             avg_epoch_hist_loss = total_epoch_hist_loss / len(self.dataloaders['train'])
 
             loss_list.append(avg_epoch_total_loss)
+
+            epss = transformer.get_current_eps()
             # Print the loss for monitoring
             print(f"\n --- Training log --- \n")
             print(f"   Epoch [{epoch + 1}/{self.num_train_epochs}]"
+                  f"\n EPS: Style: {epss[0].item()} "
+                  f"\n      Actual eps style weight: {transformer.style_eps.item()}"
+                  f"\n      Content: {epss[1].item()} "
+                  f"\n      Actual eps content weight:{transformer.content_eps.item()}"
                   f"\n Total Loss: {avg_epoch_total_loss}"
                   f"\n Loss content: {avg_epoch_content_loss} | Contributed content loss: {avg_epoch_content_loss*self.alpha}"
                   f"\n Loss style: {avg_epoch_style_loss} | Contributed style loss: {avg_epoch_style_loss*self.beta}"
@@ -511,16 +500,17 @@ class Trainer:
             if self.plot_per_epoch:
                 print(f"\n Plotting comparison of epoch [{epoch + 1}/{self.num_train_epochs}]... \n")
             plots = None
-            if self.do_eval_per_epoch:
+            if self.do_eval_per_epoch and avg_epoch_total_loss == min(loss_list) and self.save_best:
                 plots = []
                 for step, batch in enumerate(tqdm(self.dataloaders['eval'], colour='red',
                                                   desc="Evaluating progress", position=2, leave=False)):
                     content_img_paths = batch['content_image']
                     style_img_paths = batch['style_image']
+
                     plot, _ = self.plot_comparison(encoder, decoder, transformer,
                                                  content_img_paths, style_img_paths,
                                                  transforms.Compose([
-                                                     transforms.Resize(300),
+                                                     transforms.Resize(256),
                                                      transforms.ToTensor()
                                                  ]), self.device, plot=self.plot_per_epoch)
                     try:
@@ -535,7 +525,7 @@ class Trainer:
                             warnings.warn("Byte IO fail!")
                             pass
                         if self.with_tracking:
-                            comparison_plot = [wandb.Image(image, caption=f"Comparison of epoch {epoch} sample {idx}")
+                            comparison_plot = [wandb.Image(image, caption=f"Comparison of epoch {epoch+1} sample {idx}")
                                            for idx, image in enumerate(plots)]
                             self.wandb.log({"Examples": comparison_plot}, step=completed_step)
                     except Exception:
@@ -597,9 +587,6 @@ class Trainer:
             "optim_name": self.optim_name,
             'loss': info['total'],
             'completed_step': info['completed_step'],
-            "trans_size": self.transformer_size,
-            "layer_depth": self.layer_depth,
-            "deep_learner": self.deep_learner,
             "criterion": {
                 "alpha": self.alpha,
                 "beta": self.beta,
@@ -609,6 +596,21 @@ class Trainer:
                 "style_layers_idx": self.style_layers_idx
             }
         }, model_path)
+
+        try:
+            config_path = os.path.join(save_path_dir,
+                    f"config_E{info['epoch']}_{'_'.join(str(datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S')).split())}")
+            config_file = open(config_path, "w")
+            config_file.write(f"\n          {PRJ_NAME}\n")
+            config_file.write(f"\n   Epoch: {info['epoch']}")
+            config_file.write(f"\n   Completed step: {info['completed_step']}")
+            config_file.write(f"\n   Loss: {info['total']}")
+            for key, value in vars(self.config).items():
+                config_file.write(f"\n {key}: {value} ")
+            config_file.close()
+        except IOError:
+            warnings.warn(f"Can't save config for this run {info['epoch']}")
+            pass
 
         if result is not None:
             for idx, plot in enumerate(result):
@@ -632,7 +634,7 @@ class Trainer:
 
     @staticmethod
     def plot_comparison(encoder, decoder, transformer, content_img_url: list, style_img_url: list,
-                        transformation, device, sleep: int = 5, plot: bool = True):
+                        transformation, device, sleep: int = 5, plot: bool = True, alpha: float=1.0):
         try:
             for content_url, style_url in zip(content_img_url, style_img_url):
                 content_image = Image.open(content_url).convert('RGB')
@@ -650,8 +652,13 @@ class Trainer:
         encode_Sfeatures = encoder(style_image_tensor.unsqueeze(0))
 
         transformed_features = transformer(encode_Cfeatures, encode_Sfeatures)
+        transformed_features = alpha * transformed_features + (1 - alpha) * encode_Cfeatures
 
         decode_img = decoder(transformed_features)
+
+        # Normalize output
+        norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        decode_img = norm(decode_img)
 
         del encode_Cfeatures, encode_Sfeatures, transformed_features
 
