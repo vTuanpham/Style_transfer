@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -309,9 +311,9 @@ if __name__=="__main__":
 
 
     # read images
-    input_image = image_loader(r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\888440.jpg")
+    input_image = image_loader(r"./src/data/eval_dir/content/1.jpg")
 
-    target_image = image_loader(r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\style_data\Data\Artworks\888440.jpg")
+    target_image = image_loader(r"./src/data/eval_dir/style/1.jpg")
 
 
     def imshow(tensor, title=None):
@@ -321,7 +323,7 @@ if __name__=="__main__":
         plt.imshow(image)
         if title is not None:
             plt.title(title)
-        plt.pause(0.5)  # pause a bit so that plots are updated
+        plt.pause(5)  # pause a bit so that plots are updated
 
 
     plt.ion()
@@ -364,6 +366,7 @@ if __name__=="__main__":
                       input_hist.shape[0])
 
     print(f'Histogram loss = {histogram_loss}')
+    time.sleep(20)
 
 
 

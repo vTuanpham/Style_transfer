@@ -13,12 +13,12 @@ python src/train.py --output_dir "./src/models/checkpoints/training_session"    
                    --delta 1                                     \
                    --crop_width 32                               \
                    --crop_height 32                              \
-                   --content_layers_idx 12 16 21                 \
-                   --style_layers_idx 0 5 10 19 28               \
+                   --content_layers_idx 21                       \
+                   --style_layers_idx 2 7 14 19 25               \
                    --step_frequency 0.3                          \
                    --num_worker 2                                \
                    --do_eval_per_epoch                           \
-                   --optim_name rmsprop momentum=0.8             \
+                   --optim_name adamax betas=0.9,0.99            \
                    --gradient_threshold 5                        \
                    --use_pretrained_WCTDECODER                   \
                    --do_decoder_train                            \

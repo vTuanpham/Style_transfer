@@ -24,8 +24,8 @@ def parse_args(args):
                         help="The path to style dir")
     parser.add_argument('--batch_size', type=int, default=2, help="Batch size for the dataloader")
     parser.add_argument('--eval_batch_size', type=int, default=1, help="Eval batch size for the dataloader")
-    parser.add_argument('--max_content_train_samples', type=int, default=None, help="Number of content training samples")
-    parser.add_argument('--max_style_train_samples', type=int, default=None, help="Number of style training samples")
+    parser.add_argument('--max_content_train_samples', type=int, default=10000, help="Number of content training samples")
+    parser.add_argument('--max_style_train_samples', type=int, default=10000, help="Number of style training samples")
     parser.add_argument('--num_worker', type=int, default=2, help="Number of worker for dataloader")
     parser.add_argument('--seed', type=int, default=42, help="A seed for reproducible training.")
     parser.add_argument('--crop_width', type=int, default=256, help="Width of the image randomly center crop")
@@ -51,32 +51,33 @@ def parse_args(args):
                         help="Whether to enable decoder training to expand model capacity.")
     parser.add_argument('--use_pretrained_WCTDECODER', action='store_true',
                         help="Whether to load pretrained WCT decoder that were trained on image recovery.")
+    parser.add_argument('--grayscale_content_transform', action='store_true',
+                        help="Whether to enable grayscale content convert.")
 
     # Optimizer
     parser.add_argument('--vgg_model_type', type=str, default='19', help=(
             "Which models of the vgg to use as a feature extractor"
         ))
     parser.add_argument('--optim_name', nargs='+', default={'optim_name': 'adam'}, action=ParseKwargsOptim,
-                        help="Which optimizer to use")
-    parser.add_argument('--learning_rate', type=float, default=5e-5,
+                        help="Which optimizer to use, support for Kwargrs,"
+                             " example: '--optim_name adamax betas=0.9,0.99' ")
+    parser.add_argument('--learning_rate', type=float, default=1e-4,
                         help="Initial learning rate (after the potential warmup period) to use.")
     parser.add_argument('--gradient_threshold', type=float, default=None,
                         help="Gradient threshold for clipping (use for exploding gradient) (recommended range 1-10)")
-    parser.add_argument('--warm_up_epoch', type=int, default=1,
-                        help="Warmup period")
     parser.add_argument('--alpha', type=float, default=1,
-                        help="Initial alpha to use.")
-    parser.add_argument('--beta', type=float, default=1,
-                        help="Initial beta to use.")
+                        help="Initial alpha to use, this value is the weight for the content loss.")
+    parser.add_argument('--beta', type=float, default=10,
+                        help="Initial beta to use, this value is the weight for style loss.")
     parser.add_argument('--gamma', type=float, default=1,
-                        help="Initial gamma to use.")
-    parser.add_argument('--delta', type=float, default=1,
-                        help="Initial delta to use.")
+                        help="Initial gamma to use, this value is the weight for variance loss.")
+    parser.add_argument('--delta', type=float, default=10,
+                        help="Initial delta to use, this value is the weight for histogram loss.")
     parser.add_argument('--eps', type=float, default=1e-5,
-                        help="Eps value for AdaIN.")
-    parser.add_argument('--content_layers_idx', nargs='+', type=int, default=[8, 11, 13],
+                        help="Maximum eps value for AdaIN for both content and style.")
+    parser.add_argument('--content_layers_idx', nargs='+', type=int, default=[21],
                         help="Vgg layers to compute content loss")
-    parser.add_argument('--style_layers_idx', nargs='+', type=int, default=[1, 3, 6, 8],
+    parser.add_argument('--style_layers_idx', nargs='+', type=int, default=[2, 7, 14, 19, 25],
                         help="Vgg layers to compute style loss")
 
     args = parser.parse_args(args)
@@ -89,6 +90,9 @@ def parse_args(args):
         assert os.path.isdir(path), "Invalid style dir path!"
     assert os.path.isfile(args.resume_from_checkpoint) \
         if args.resume_from_checkpoint is not None else True , "Invalid cpkt path!"
+
+    assert args.max_content_train_samples > 0 and args.max_style_train_samples > 0,\
+        "Number of examples must be higher than 0"
 
     return args
 
@@ -109,7 +113,7 @@ def main(args):
             transforms.Resize(300),
             transforms.RandomCrop((args.crop_width, args.crop_height), pad_if_needed=True, padding=1),
             transforms.ToTensor(),
-            RGBToGrayscaleStacked(),
+            RGBToGrayscaleStacked(enable=args.grayscale_content_transform),
             transforms.RandomRotation(degrees=90),
             transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.5),
             transforms.ColorJitter(brightness=0.2, contrast=0.4, saturation=0.3, hue=0.1),
@@ -140,7 +144,6 @@ def main(args):
         "per_device_batch_size":dataloaders.batch_size,
         "do_eval_per_epoch": args.do_eval_per_epoch,
         "plot_per_epoch": args.plot_per_epoch,
-        "warm_up_epoch": args.warm_up_epoch,
         "learning_rate": args.learning_rate,
         "vgg_model_type": args.vgg_model_type,
         "seed": args.seed,
@@ -157,6 +160,7 @@ def main(args):
         "gradient_threshold": args.gradient_threshold,
         "do_decoder_train": args.do_decoder_train,
         "use_pretrained_WCTDECODER": args.use_pretrained_WCTDECODER,
+        "grayscale_content_transform": args.grayscale_content_transform,
         "config": args
     }
     trainer = Trainer(**trainer_args)

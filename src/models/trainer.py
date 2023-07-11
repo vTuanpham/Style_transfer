@@ -1,6 +1,6 @@
-import datetime
 import io
 import random
+import datetime
 import sys
 import os
 import time
@@ -25,10 +25,10 @@ from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 
 from src.models.losses import AdaINStyleLoss, AdaINContentLoss, TVLoss, HistLoss
-
 from src.models.generator import Encoder, Decoder
 from src.models.transformer import AdaIN
-from src.utils.image_plot import plot_image
+from src.utils.custom_transform import RGBToGrayscaleStacked
+
 
 
 PRJ_NAME = "Style_transfer"
@@ -45,7 +45,6 @@ class Trainer:
                  beta: float,
                  gamma: float,
                  seed: int = 42,
-                 warm_up_epoch: int = 1,
                  do_eval_per_epoch: bool = True,
                  plot_per_epoch: bool = False,
                  save_best: bool = True,
@@ -61,6 +60,7 @@ class Trainer:
                  step_frequency: float = 0.5,
                  gradient_threshold: float = None,
                  config: Namespace = None,
+                 grayscale_content_transform: bool=False,
                  content_layers_idx: List[int] = [12, 16, 21],
                  style_layers_idx: List[int] = [0, 5, 10, 19, 28]
                  ):
@@ -80,12 +80,12 @@ class Trainer:
         self.content_layers_idx = content_layers_idx
         self.style_layers_idx = style_layers_idx
         self.num_train_epochs = num_train_epochs
-        self.warm_up_epoch = warm_up_epoch
         self.step_frequency = step_frequency
         self.optim_name = optim_name
         self.gradient_threshold = gradient_threshold
         self.do_decoder_train = do_decoder_train
         self.use_pretrained_WCTDECODER = use_pretrained_WCTDECODER
+        self.grayscale_content_transform = grayscale_content_transform
 
         self.with_tracking = with_tracking
         self.log_weights_cpkt = log_weights_cpkt
@@ -95,7 +95,6 @@ class Trainer:
         self.do_eval_per_epoch = do_eval_per_epoch
         self.config = config
 
-        # set_seed(seed)
         self.seed = seed
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -133,9 +132,9 @@ class Trainer:
                         "optim_name": self.optim_name,
                         "step_frequency": self.step_frequency,
                         "seed": self.seed,
-                        "warmup_epochs": self.warm_up_epoch,
                         "do_decoder_train": self.do_decoder_train,
                         "use_pretrained_WCTDECODER": self.use_pretrained_WCTDECODER,
+                        "grayscale_content_transform": self.grayscale_content_transform,
                         "full_config": vars(self.config)
                         }
                 )
@@ -272,7 +271,6 @@ class Trainer:
                                                        kwargs=self.optim_name
                                                        )
 
-
         norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
         init_epoch = 0
@@ -374,6 +372,7 @@ class Trainer:
         print(f"\n Number of epoch: {self.num_train_epochs}"
               f"\n Optim name: {self.optim_name}"
               f"\n Gradient threshold: {self.gradient_threshold}"
+              f"\n Grayscale convert for content: {self.grayscale_content_transform}"
               f"\n Init epoch: {init_epoch}"
               f"\n Eps: {self.eps}"
               f"\n Do decoder training: {self.do_decoder_train}"
@@ -464,8 +463,8 @@ class Trainer:
                                     "Loss_variation_contributed_batch": variation_loss * self.gamma,
                                     "Loss_histogram_contributed_batch": histogram_loss * self.delta,
                                     "Total_loss_batch": float(total_loss.item()),
-                                    "Style_EPS": epss[0].item(),
-                                    "Content_EPS": epss[1].item()}, step=completed_step)
+                                    "Style_EPS": epss[0],
+                                    "Content_EPS": epss[1]}, step=completed_step)
 
                 # Update learning rate
                 scheduler_count += 1
@@ -486,9 +485,9 @@ class Trainer:
             # Print the loss for monitoring
             print(f"\n --- Training log --- \n")
             print(f"   Epoch [{epoch + 1}/{self.num_train_epochs}]"
-                  f"\n EPS: Style: {epss[0].item()} "
+                  f"\n EPS: Style: {epss[0]} "
                   f"\n      Actual eps style weight: {transformer.style_eps.item()}"
-                  f"\n      Content: {epss[1].item()} "
+                  f"\n      Content: {epss[1]} "
                   f"\n      Actual eps content weight:{transformer.content_eps.item()}"
                   f"\n Total Loss: {avg_epoch_total_loss}"
                   f"\n Loss content: {avg_epoch_content_loss} | Contributed content loss: {avg_epoch_content_loss*self.alpha}"
@@ -509,10 +508,16 @@ class Trainer:
 
                     plot, _ = self.plot_comparison(encoder, decoder, transformer,
                                                  content_img_paths, style_img_paths,
-                                                 transforms.Compose([
+                                                 content_transformation=transforms.Compose([
+                                                     transforms.Resize(256),
+                                                     transforms.ToTensor(),
+                                                     RGBToGrayscaleStacked(enable=self.grayscale_content_transform)
+                                                 ]),
+                                                 style_transformation=transforms.Compose([
                                                      transforms.Resize(256),
                                                      transforms.ToTensor()
-                                                 ]), self.device, plot=self.plot_per_epoch)
+                                                 ]),
+                                                device=self.device, plot=self.plot_per_epoch)
                     try:
                         try:
                             io_buf = io.BytesIO()
@@ -633,8 +638,9 @@ class Trainer:
                     raise "Unable to creating or initializing artifact to log cpkt!"
 
     @staticmethod
-    def plot_comparison(encoder, decoder, transformer, content_img_url: list, style_img_url: list,
-                        transformation, device, sleep: int = 5, plot: bool = True, alpha: float=1.0):
+    def plot_comparison(encoder, decoder, transformer, content_img_url: list, style_img_url: list, device='cpu',
+                        content_transformation=None, style_transformation=None, sleep: int = 5,
+                        plot: bool = True, alpha: float=1.0):
         try:
             for content_url, style_url in zip(content_img_url, style_img_url):
                 content_image = Image.open(content_url).convert('RGB')
@@ -642,8 +648,17 @@ class Trainer:
         except IOError:
             raise "Invalid image url!"
 
-        content_image_tensor = transformation(content_image).to(device)
-        style_image_tensor = transformation(style_image).to(device)
+        if content_transformation:
+            content_image_tensor = content_transformation(content_image).to(device)
+
+        org_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.ToTensor()
+        ])
+        content_image_tensor_org = org_transform(content_image)
+
+        if style_transformation:
+            style_image_tensor = style_transformation(style_image).to(device)
 
         transformer.eval()
         decoder.eval()
@@ -663,7 +678,7 @@ class Trainer:
         del encode_Cfeatures, encode_Sfeatures, transformed_features
 
         # Convert tensor images to numpy arrays and adjust their shape if needed
-        image1_np = content_image_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()  # Adjust dimensions as per your tensor shape
+        image1_np = content_image_tensor_org.squeeze().permute(1, 2, 0).detach().cpu().numpy()  # Adjust dimensions as per your tensor shape
         image2_np = style_image_tensor.squeeze().permute(1, 2, 0).detach().cpu().numpy()
         image3_np = decode_img.squeeze().permute(1, 2, 0).detach().cpu().numpy()  # Adjust dimensions as per your tensor shape
 

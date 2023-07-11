@@ -1,3 +1,5 @@
-python src/train.py --output_dir "src/models/checkpoints" --content_datapath "./src/data/mirflickr" --style_datapath "./src/data/Art_by_number/train_9" --batch_size 2
---max_style_train_samples 2000 --max_eval_samples 5 --seed 42 --num_train_epochs 6 --learning_rate 5e-5 --alpha 0.4 --beta 0.6 --gamma 14 --delta 27 --max_content_train_samples 2000 --width 256 --height 256 --crop_width 128 --crop_heig
-ht 128 --CNN_layer_depth 4 --deep_learner --content_layers_idx 26 33 --style_layers_idx 1 3 6 8 11 13
+python src/train.py --output_dir "src/models/checkpoints" --content_datapath "./src/data/mirflickr" --style_datapath "./src/data/Art_by_number/raw/train_9" "./src/da
+ta/dtd/images/bubbly" "./src/data/dtd/images/grid" --batch_size 4 --max_style_train_samples 2000 --seed 42 --num_train_epochs 10 --learning_rate 1e-4 --alpha 1 --beta 10.5 --gamma 2.5 --delta 10.5 --max_content_train_samples 2000 --c
+rop_width 128 --crop_height 128 --content_layers_idx 21 --style_layers_idx 2 7 14 19 25 --step_frequency 0.15 --do_eval_per_epoch --optim_name Adamax betas=0.9,0.99 --gradient_threshold 10 --use_pretrained_WCTDECODER --do_decoder_tra
+in --eps 0.3
+
