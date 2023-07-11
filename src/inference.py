@@ -9,11 +9,13 @@ import matplotlib.pyplot as plt
 from collections import OrderedDict
 
 import numpy as np
+import torchvision.transforms as transforms
+
 from src.models.generator import Encoder, Decoder
 from src.models.transformer import AdaIN
 from src.models.trainer import Trainer
 from src.data.dataloader import STDataloader
-import torchvision.transforms as transforms
+from src.utils.custom_transform import RGBToGrayscaleStacked
 
 
 def parse_args(args):
@@ -42,22 +44,25 @@ def main(args):
     encoder = Encoder().to(device)
     decoder = Decoder().to(device)
     checkpoint = torch.load(args.path_to_save_cpkt)
-    decoder_cpkt = torch.load(r'C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\models\checkpoints\training_session\AdaIN\decoder.pth')
-
     transformer = AdaIN().to(device)
-    decoder.decoder.load_state_dict(decoder_cpkt)
+    decoder.load_state_dict(checkpoint['decoder_state_dict'])
     transformer.load_state_dict(checkpoint['model_state_dict'])
     decoder.eval()
     transformer.eval()
 
     _, result = Trainer.plot_comparison(encoder, decoder, transformer,
-                                         [r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\359733373_638860051290066_4793153396181217139_n.png"],
-                                        [r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\data\painting.jpg"],
-                                        transforms.Compose([
+                                         [r"./src/data/eval_dir/content/1.jpg"],
+                                        [r"./src/data/eval_dir/style/6.jpg"],
+                                        content_transformation=transforms.Compose([
+                                            transforms.Resize(450),
+                                            transforms.ToTensor(),
+                                            RGBToGrayscaleStacked(False)
+                                        ]),
+                                        style_transformation=transforms.Compose([
                                             transforms.Resize(450),
                                             transforms.ToTensor()
                                         ]),
-                                        device,
+                                        device=device,
                                         sleep=20, alpha=args.alpha)
 
     image3_np = result.squeeze().permute(1, 2, 0).detach().cpu() # Adjust dimensions as per your tensor shape

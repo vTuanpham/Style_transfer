@@ -30,40 +30,21 @@ class AddGaussianNoise:
 
 
 class RGBToGrayscaleStacked:
+    def __init__(self, enable: bool=False):
+        self.enable = enable
+
     def __call__(self, img):
-        gray_img = torch.zeros_like(img)
-        gray_img[0, :, :] = img[0, :, :] * 0.299
-        gray_img[1, :, :] = img[1, :, :] * 0.587
-        gray_img[2, :, :] = img[2, :, :] * 0.144
-        gray_img = torch.sum(gray_img, dim=0, keepdim=True)
-        gray_img = torch.cat([gray_img] * 3, dim=0)
-        return gray_img
+        if self.enable:
+            gray_img = torch.zeros_like(img)
+            gray_img[0, :, :] = img[0, :, :] * 0.299
+            gray_img[1, :, :] = img[1, :, :] * 0.587
+            gray_img[2, :, :] = img[2, :, :] * 0.144
+            gray_img = torch.sum(gray_img, dim=0, keepdim=True)
+            gray_img = torch.cat([gray_img] * 3, dim=0)
 
+            return gray_img
+        return img
 
-# if __name__ == "__main__":
-#     # Test the transform on a sample RGB image
-#     image_path = r"C:\Users\Tuan Pham\Desktop\Study\SelfStudy\venv2\style_transfer\src\stylized_image1.jpg"
-#     img = Image.open(image_path).convert("RGB")
-#
-#     transform = transforms.Compose([
-#         transforms.ToTensor(),  # Convert image to tensor
-#         RGBToGrayscaleStacked(),  # Convert RGB to grayscale stacked
-#     ])
-#
-#     transformed_img = transform(img)
-#
-#     # Print the shape and data of the transformed image
-#     print("Transformed Image Shape:", transformed_img.shape)
-#     print("Transformed Image Data:")
-#     print(transformed_img)
-#
-#     # Convert tensor back to PIL image
-#     transformed_img = transforms.ToPILImage()(transformed_img.squeeze())
-#
-#     # Plot the transformed image
-#     plt.imshow(transformed_img)
-#     plt.axis("off")
-#     plt.show()
 
 if __name__ == "__main__":
     # Test the transform on a sample RGB image

@@ -36,8 +36,12 @@ class AdaIN(nn.Module):
         return scaled_output
 
     def get_current_eps(self):
-        return [self.adjust_sigmoid(self.style_eps, self.eps_limit),
-                self.adjust_sigmoid(self.content_eps, self.eps_limit)]
+        if torch.cuda.is_available():
+            return [self.adjust_sigmoid(self.style_eps, self.eps_limit).item(),
+                    self.adjust_sigmoid(self.content_eps, self.eps_limit).item()]
+        else:
+            return [self.adjust_sigmoid(self.style_eps, self.eps_limit),
+                    self.adjust_sigmoid(self.content_eps, self.eps_limit)]
 
     def adaptive_instance_normalization(self, content_feat, style_feat, style_eps=1e-5, content_eps=1e-5):
         assert (content_feat.size()[:2] == style_feat.size()[:2])
