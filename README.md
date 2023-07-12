@@ -27,6 +27,8 @@
   ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/5cccd992-abe5-480b-9981-fc4f8aaee884)
   ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/16e6929a-860c-4038-8df0-924a98331cc7)
   ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/ebc3b5e4-9b27-4e78-b0cf-261562fb764b)
+  ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/26ff5fe9-1ef8-4b7c-bc08-0fc0302bca9e)
+
 
 ## Training
   ```
