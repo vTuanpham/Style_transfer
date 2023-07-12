@@ -20,6 +20,8 @@
   * Add new augmentations for content and style
 
 ## Results:
+  ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/16e47a49-6d44-448c-92a7-5ddd81c51b85)
+  ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/cdfbb246-572a-4cb4-8629-47fc87deaa8b)
   ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/be3aef53-6ff2-42cd-8ff7-1e00c3dedabf)
   ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/94db9f2c-d569-4890-9b4b-cf574e399f6e)
   ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/5cccd992-abe5-480b-9981-fc4f8aaee884)
