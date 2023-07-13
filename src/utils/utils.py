@@ -1,9 +1,13 @@
 import sys
 import os
-sys.path.insert(0,r'./')
+import gc
+import time
 import random
-import torch
 import argparse
+sys.path.insert(0,r'./')
+from functools import wraps
+
+import torch
 import numpy as np
 
 
@@ -57,6 +61,19 @@ class ParseKwargsOptim(argparse.Action):
                 kwargs_dict[key] = value
 
 
+def timeit(func):
+    @wraps(func)
+    def timeit_wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+        print(f'Function {func.__name__} Took {total_time:.4f} seconds')
+
+        return result
+    return timeit_wrapper
+
+
 def set_seed(value):
     print("\n Random Seed: ", value)
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
@@ -70,6 +87,8 @@ def set_seed(value):
 def clear_cuda_cache():
     print("\n Clearing cuda cache...")
     torch.cuda.empty_cache()
+    print("\n Running garbage collection...")
+    gc.collect()
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ import random
 import datetime
 import sys
 import os
+import gc
 import time
 import math
 import warnings
@@ -28,7 +29,6 @@ from src.models.losses import AdaINStyleLoss, AdaINContentLoss, TVLoss, HistLoss
 from src.models.generator import Encoder, Decoder
 from src.models.transformer import AdaIN
 from src.utils.custom_transform import RGBToGrayscaleStacked
-
 
 
 PRJ_NAME = "Style_transfer"
@@ -438,6 +438,7 @@ class Trainer:
 
                 del content_features, style_features, encode_Cfeatures, encode_Sfeatures
                 del org_output_features, gen_output_features, transformed_features
+                # torch.cuda.empty_cache()
 
                 # Backpropagation and optimization
                 transformer_optimizer.zero_grad()
@@ -676,6 +677,7 @@ class Trainer:
         decode_img = norm(decode_img)
 
         del encode_Cfeatures, encode_Sfeatures, transformed_features
+        # torch.cuda.empty_cache()
 
         # Convert tensor images to numpy arrays and adjust their shape if needed
         image1_np = content_image_tensor_org.squeeze().permute(1, 2, 0).detach().cpu().numpy()  # Adjust dimensions as per your tensor shape
