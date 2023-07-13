@@ -29,6 +29,8 @@
   ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/ebc3b5e4-9b27-4e78-b0cf-261562fb764b)
   ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/26ff5fe9-1ef8-4b7c-bc08-0fc0302bca9e)
 
+  - Some of the results above use the alpha value higher than 1 (emphasis on the style)
+
 
 ## Training
   ```
@@ -41,7 +43,8 @@
   ```
   * Note: Wandb must be the the correct version of 0.13.9 as i only test the artifact logging of this version,
     newer version yield in error when creating new artifact instance
-  To train, modify the script in the src/scripts folder
+    
+  To train, modify the script in src/scripts/train.sh 
   ```
   bash src/scripts/train.sh 
   ```
