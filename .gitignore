@@ -10,3 +10,6 @@ src/data/*
 src/models/checkpoints/*
 !src/models/checkpoints/WCT_encoder_decoder
 
+src/output/*
+!src/output/*.txt
+

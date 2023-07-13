@@ -30,7 +30,9 @@ def parse_args(args):
     parser.add_argument('--seed', type=int, default=42, help="A seed for reproducible training.")
     parser.add_argument('--crop_width', type=int, default=256, help="Width of the image randomly center crop")
     parser.add_argument('--crop_height', type=int, default=256, help="Width of the image randomly center crop")
-
+    parser.add_argument('--recursive_paths_load', action='store_true',
+                        help="Whether to enable recursive load to load all instance of image files"
+                             "found in the content and style datapath.")
 
     # Training
     parser.add_argument('--num_train_epochs', type=int, default=10,
@@ -131,6 +133,7 @@ def main(args):
         ]),
         "max_style_train_samples": args.max_style_train_samples,
         "max_content_train_samples": args.max_content_train_samples,
+        "recursive_paths_load": args.recursive_paths_load,
         "num_worker": args.num_worker
     }
     dataloaders = STDataloader(**dataloader_args)
