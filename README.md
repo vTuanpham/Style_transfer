@@ -33,17 +33,20 @@
 ## Training
   ```
   git clone "https://github.com/vTuanpham/Style_transfer.git"
+  cd "Style_transfer"
   ```
   Install dependencies first, this might take awhile..
   ```
   pip install -r requirements.txt
   ```
+  * Note: Wandb must be the the correct version of 0.13.9 as i only test the artifact logging of this version,
+    newer version yield in error when creating new artifact instance
   To train, modify the script in the src/scripts folder
   ```
   bash src/scripts/train.sh 
   ```
 
-  * This project is heavily support for wandb logging:
+  * ## This project is heavily support for wandb logging:
     ### Every epochs, eval the model performance by inferencing all the images in the src/data/eval_dir   
     * ![image](https://github.com/vTuanpham/Style_transfer/assets/82665400/051c1ed1-2402-4b70-84dd-aab9711afb39)
     ### Auto log saved checkpoint to wandb with wandb artifacts
@@ -54,7 +57,11 @@
 
   #### Modified the alpha value (higher mean higher emphasis on the style)
   ```
-  python src/inference.py --path_to_save_cpkt "" --alpha 
+  python src/inference.py -cpkt ".pth" --alpha 1 -c "./src/data/eval_dir/content/1.jpg" -s "./src/data/eval_dir/style/1.jpg"  
+  ```
+  #### Or config the src/scripts/inference.sh and:
+  ```
+  bash src/scripts/inference.sh
   ```
 
 ### Leave a star ⭐ if you find this useful!
