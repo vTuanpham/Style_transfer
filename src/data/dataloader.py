@@ -144,10 +144,10 @@ class STDataloader:
         print(f"\n Loading eval style samples in {self.eval_stylepath.split('/')[-1]}...")
         style_eval_urls = self.get_img_path_list(self.eval_stylepath)
 
-        train_dataset = STDataset(content_image_urls,style_image_urls,
+        train_dataset = STDataset(sorted(content_image_urls, key=len), sorted(style_image_urls, key=len),
                                   transform_content=self.transform_content, transform_style=self.transform_style)
 
-        eval_dataset = STDataset(sorted(content_eval_urls), sorted(style_eval_urls), url_only=True)
+        eval_dataset = STDataset(sorted(content_eval_urls, key=len), sorted(style_eval_urls, key=len), url_only=True)
 
         return {"train":self.get_dataloader(train_dataset, shuffle_flag=True, batch_size=self.batch_size),
                 "eval": self.get_dataloader(eval_dataset, shuffle_flag=False, batch_size=self.eval_batch_size)}

@@ -29,6 +29,7 @@ from src.models.losses import AdaINStyleLoss, AdaINContentLoss, TVLoss, HistLoss
 from src.models.generator import Encoder, Decoder
 from src.models.transformer import AdaIN
 from src.utils.custom_transform import RGBToGrayscaleStacked
+from src.utils.utils import timeit
 
 
 PRJ_NAME = "Style_transfer"
@@ -254,6 +255,7 @@ class Trainer:
 
         return loss_content, loss_style, variation_loss, histogram_loss, total_loss
 
+    @timeit
     def train(self):
         encoder, decoder, transformer, content_extractors, style_extractors = self.build_model()
 
