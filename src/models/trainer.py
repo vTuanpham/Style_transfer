@@ -16,6 +16,7 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 import torchvision.models as models
 import torchvision.transforms as transforms
+from torch.nn.utils import weight_norm
 from torchvision.models._utils import IntermediateLayerGetter
 
 import wandb
@@ -159,22 +160,39 @@ class Trainer:
             self.wandb = None
 
     @staticmethod
-    def get_feature_extractor(selected_indices, vgg_model_type="16", device='cpu'):
-        if vgg_model_type == "16":
-            vgg = models.vgg19(weights='IMAGENET1K_V1').features
-        else:
-            vgg = models.vgg16(weights='IMAGENET1K_V1').features
+    def get_feature_extractor(selected_indices, vgg_model_type="19", device='cpu'):
+        if vgg_model_type == "19":
+            model = models.vgg19(weights='IMAGENET1K_V1').features
+        elif vgg_model_type == "16":
+            model = models.vgg16(weights='IMAGENET1K_V1').features
+        elif vgg_model_type == "resnet50":
+            model = models.resnet50(weights='IMAGENET1K_V1').layer2
+        elif vgg_model_type == "resnet34":
+            model = models.resnet34(weights='IMAGENET1K_V1').layer2
+        elif vgg_model_type == "resnet152":
+            model = models.resnet152(weights='IMAGENET1K_V1').layer2
 
-        layers = list(vgg.children())
+        # Norm weights for pretrained models
+        for k, v in model.named_modules():
+            if isinstance(v, nn.Conv2d):
+                setattr(model, k, weight_norm(v))
+
+        layers = list(model.children())
 
         if isinstance(selected_indices, list):
             selected_layers = {str(idx): layers[idx] for idx in selected_indices if idx < len(layers)}
             if len(selected_layers) != len(selected_indices):
-                raise ValueError("Invalid layer index provided.")
+                raise ValueError(f"\n Invalid layer index provided, the len of the model is"
+                                 f" {len(selected_layers)} and you pass in {len(selected_indices)}")
         else:
-            raise ValueError("Selected indices should be provided as a list of layer indices.")
+            raise ValueError(f"\n Selected indices should be provided as a list of layer indices,"
+                             f" you pass in {selected_indices}")
 
-        feature_extractors = IntermediateLayerGetter(vgg, return_layers=selected_layers).to(device)
+        try:
+            feature_extractors = IntermediateLayerGetter(model, return_layers=selected_layers).to(device)
+        except IndexError:
+            raise f"Index out of range for the selected layer {selected_layers}!"
+
         return feature_extractors
 
     @staticmethod
@@ -222,7 +240,7 @@ class Trainer:
 
         return encoder, decoder, transformer, content_extractors, style_extractors
 
-    def compute_loss(self, content_features, style_features, stylized_outputs, style_imgs):
+    def compute_loss(self, content_features, style_features, stylized_outputs, style_imgs, content_imgs):
         # Compute content loss
         losses = []
         for feature in content_features:
@@ -245,7 +263,9 @@ class Trainer:
         variation_loss = self.variation_loss(stylized_outputs)
 
         # Compute hist loss
-        histogram_loss = self.hist_loss(stylized_outputs, style_imgs)
+        histogram_loss_S = self.hist_loss(stylized_outputs, style_imgs)
+        histogram_loss_C = self.hist_loss(stylized_outputs, content_imgs)
+        histogram_loss = 0.4 * histogram_loss_S + 0.6 * histogram_loss_C
 
         # Compute total loss
         total_loss = self.alpha * loss_content \
@@ -436,7 +456,8 @@ class Trainer:
                                                                                         content_features,
                                                                                         style_features,
                                                                                         decode_imgs,
-                                                                                        style_imgs)
+                                                                                        style_imgs,
+                                                                                        content_imgs)
 
                 del content_features, style_features, encode_Cfeatures, encode_Sfeatures
                 del org_output_features, gen_output_features, transformed_features
