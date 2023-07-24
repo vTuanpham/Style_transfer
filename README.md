@@ -17,6 +17,7 @@
   * The AdaIN module have trainable params(EPS) (Better training stability)
   * Use pretrained images recovery in the decoder for faster training
   * Added histogram loss and variance loss to better guide the model
+  * Added both the style loss from AdaIN(compare mean and var) and the Gram matrices style loss (VincentStyleLoss) 
   * Add new augmentations for content and style
 
 ## Results:
