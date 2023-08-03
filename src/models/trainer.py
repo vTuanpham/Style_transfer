@@ -26,11 +26,11 @@ from typing import List
 from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 
-from src.models.losses import AdaINStyleLoss, AdaINContentLoss, TVLoss, HistLoss
+from src.models.losses import AdaINStyleLoss, VincentStyleLoss, AdaINContentLoss, TVLoss, HistLoss
 from src.models.generator import Encoder, Decoder
 from src.models.transformer import AdaIN
 from src.utils.custom_transform import RGBToGrayscaleStacked
-from src.utils.utils import timeit
+from src.utils.utils import timeit, clear_cuda_cache
 
 
 PRJ_NAME = "Style_transfer"
@@ -63,6 +63,7 @@ class Trainer:
                  gradient_threshold: float = None,
                  config: Namespace = None,
                  grayscale_content_transform: bool=False,
+                 use_VincentStyleLoss: bool=False,
                  content_layers_idx: List[int] = [12, 16, 21],
                  style_layers_idx: List[int] = [0, 5, 10, 19, 28]
                  ):
@@ -88,6 +89,7 @@ class Trainer:
         self.do_decoder_train = do_decoder_train
         self.use_pretrained_WCTDECODER = use_pretrained_WCTDECODER
         self.grayscale_content_transform = grayscale_content_transform
+        self.use_VincentStyleLoss = use_VincentStyleLoss
 
         self.with_tracking = with_tracking
         self.log_weights_cpkt = log_weights_cpkt
@@ -101,7 +103,7 @@ class Trainer:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self.variation_loss = TVLoss()
-        self.style_loss = AdaINStyleLoss()
+        self.style_loss = AdaINStyleLoss() if not self.use_VincentStyleLoss else VincentStyleLoss()
         self.content_loss = AdaINContentLoss()
         self.hist_loss = HistLoss()
 
@@ -137,6 +139,7 @@ class Trainer:
                         "do_decoder_train": self.do_decoder_train,
                         "use_pretrained_WCTDECODER": self.use_pretrained_WCTDECODER,
                         "grayscale_content_transform": self.grayscale_content_transform,
+                        "use_VincentStyleLoss": self.use_VincentStyleLoss,
                         "full_config": vars(self.config)
                         }
                 )
@@ -392,6 +395,7 @@ class Trainer:
 
         print(f"\n --- Training init log --- \n")
         print(f"\n Number of epoch: {self.num_train_epochs}"
+              f"\n Use VincentStyleLoss: {self.use_VincentStyleLoss}"
               f"\n Optim name: {self.optim_name}"
               f"\n Gradient threshold: {self.gradient_threshold}"
               f"\n Grayscale convert for content: {self.grayscale_content_transform}"
@@ -561,6 +565,8 @@ class Trainer:
                         warnings.warn("Unable to log examples to wandb!")
                         pass
 
+
+
             if self.with_tracking:
                 print("--- Logging to wandb ---")
                 self.wandb.log({"Epoch": epoch+1,
@@ -592,6 +598,8 @@ class Trainer:
                 if self.plot_per_epoch:
                     plot.close('all')
                 continue
+
+        clear_cuda_cache()
 
         if self.with_tracking:
             self.wandb.finish()
