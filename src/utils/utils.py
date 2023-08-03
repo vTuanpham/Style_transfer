@@ -85,10 +85,10 @@ def set_seed(value):
 
 
 def clear_cuda_cache():
-    print("\n Clearing cuda cache...")
-    torch.cuda.empty_cache()
     print("\n Running garbage collection...")
     gc.collect()
+    print("\n Clearing cuda cache...")
+    torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import time
+import warnings
 
 import numpy as np
 from PIL import Image
@@ -36,6 +37,57 @@ class AdaINStyleLoss(nn.Module):
 
     def forward(self, input, target):
         return self.calc_style_loss(input, target)
+
+
+class VincentStyleLoss(nn.Module):
+    def __init__(self, scale_factor=1e-5):
+        super(VincentStyleLoss, self).__init__()
+        warnings.warn("\n Using VincentStyleLoss might me slow!")
+        self.scale_factor = scale_factor  # Defaults tend to be very large, we scale to make them easier to work with
+
+    @staticmethod
+    def calc_2_moments(x):
+        b, c, w, h = x.shape
+        x = x.reshape(b, c, w * h)  # b, c, n
+        mu = x.mean(dim=-1, keepdim=True)  # b, c, 1
+        cov = torch.bmm(x - mu, torch.transpose(x - mu, -1, -2))
+        return mu, cov
+
+    @staticmethod
+    def matrix_diag(diagonal):
+        N = diagonal.shape[-1]
+        shape = diagonal.shape[:-1] + (N, N)
+        device, dtype = diagonal.device, diagonal.dtype
+        result = torch.zeros(shape, dtype=dtype, device=device)
+        indices = torch.arange(result.numel(), device=device).reshape(shape)
+        indices = indices.diagonal(dim1=-2, dim2=-1)
+        result.view(-1)[indices] = diagonal
+        return result
+
+    def l2wass_dist(self, mean_stl, cov_stl, mean_synth, cov_synth):
+        # Calculate tr_cov and root_cov from mean_stl and cov_stl
+        eigvals, eigvects = torch.linalg.eigh(
+            cov_stl)  # eig returns complex tensors, I think eigh matches tf self_adjoint_eig
+        eigroot_mat = self.matrix_diag(torch.sqrt(eigvals.clip(0)))
+        root_cov_stl = torch.matmul(torch.matmul(eigvects, eigroot_mat), torch.transpose(eigvects, -1, -2))
+        tr_cov_stl = torch.sum(eigvals.clip(0), dim=1, keepdim=True)
+
+        tr_cov_synth = torch.sum(torch.linalg.eigvalsh(cov_synth).clip(0), dim=1, keepdim=True)
+        mean_diff_squared = torch.mean((mean_synth - mean_stl) ** 2)
+        cov_prod = torch.matmul(torch.matmul(root_cov_stl, cov_synth), root_cov_stl)
+        var_overlap = torch.sum(torch.sqrt(torch.linalg.eigvalsh(cov_prod).clip(0.1)), dim=1,
+                                keepdim=True)  # .clip(0) meant errors getting eigvals
+        dist = mean_diff_squared + tr_cov_stl + tr_cov_synth - 2 * var_overlap
+        return dist
+
+    def forward(self, input_f, target_f):
+
+        mean_synth, cov_synth = self.calc_2_moments(input_f)  # input mean and cov
+        mean_stl, cov_stl = self.calc_2_moments(target_f)  # target mean and cov
+        loss = self.l2wass_dist(mean_stl, cov_stl, mean_synth, cov_synth)
+        del mean_stl, cov_stl, mean_synth, cov_synth, input_f, target_f
+
+        return loss.mean() * self.scale_factor
 
 
 class AdaINContentLoss(nn.Module):
@@ -290,6 +342,7 @@ class HistLoss(nn.Module):
         histogram_loss = (1 / np.sqrt(2.0) *
                           (torch.sqrt(torch.sum(torch.pow(torch.sqrt(target_hist) -
                                                 torch.sqrt(input_hist), 2)))) /input_hist.shape[0])
+        del input, target, input_hist, target_hist
 
         return histogram_loss*100
 

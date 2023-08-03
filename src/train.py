@@ -81,6 +81,8 @@ def parse_args(args):
                         help="Vgg layers to compute content loss")
     parser.add_argument('--style_layers_idx', nargs='+', type=int, default=[2, 7, 14, 19, 25],
                         help="Vgg layers to compute style loss")
+    parser.add_argument('--use_VincentStyleLoss', action='store_true',
+                        help="Whether to enable the default style loss implementation using Gram matrices")
 
     args = parser.parse_args(args)
 
@@ -164,6 +166,7 @@ def main(args):
         "do_decoder_train": args.do_decoder_train,
         "use_pretrained_WCTDECODER": args.use_pretrained_WCTDECODER,
         "grayscale_content_transform": args.grayscale_content_transform,
+        "use_VincentStyleLoss" : args.use_VincentStyleLoss,
         "config": args
     }
     trainer = Trainer(**trainer_args)
