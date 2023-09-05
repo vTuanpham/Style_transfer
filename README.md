@@ -72,7 +72,7 @@
 
 
 ### TODO:
-  * Include model checkpoint
+  * Add better model checkpoint
   * Easier inference
   * Add docs on all args for training
   * Longer training might reduce noise ?
