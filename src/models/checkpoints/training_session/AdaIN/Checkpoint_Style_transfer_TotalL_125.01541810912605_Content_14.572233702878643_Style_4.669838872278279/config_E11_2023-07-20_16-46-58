@@ -1,0 +1,41 @@
+
+          Style_transfer
+
+   Epoch: 11
+   Completed step: 86662800
+   Loss: 125.01541810912605
+ output_dir: /kaggle/working/ 
+ content_datapath: ['/kaggle/input/ms-coco-dataset/train2014/train2014'] 
+ style_datapath: ['/kaggle/input/wikiart-gangogh-creating-art-gan/images', '/kaggle/working/train/train_2', '/kaggle/working/train/train_8', '/kaggle/input/wikiart'] 
+ eval_contentpath: ./src/data/eval_dir/content 
+ eval_stylepath: ./src/data/eval_dir/style 
+ batch_size: 15 
+ eval_batch_size: 1 
+ max_content_train_samples: 80000 
+ max_style_train_samples: 80000 
+ num_worker: 2 
+ seed: 2813 
+ crop_width: 256 
+ crop_height: 256 
+ recursive_paths_load: True 
+ num_train_epochs: 20 
+ step_frequency: 0.15 
+ with_tracking: True 
+ log_weights_cpkt: True 
+ resume_from_checkpoint: /kaggle/input/cpkts-30k-trans32-depth4-deeplearner/Checkpoint_Style_transfer_TotalL_168.06640023841447_Content_14.876569340461746_Style_5.436526552685559/transformer57028.pth 
+ plot_per_epoch: False 
+ do_eval_per_epoch: True 
+ do_decoder_train: True 
+ use_pretrained_WCTDECODER: True 
+ grayscale_content_transform: False 
+ vgg_model_type: 19 
+ optim_name: {'optim_name': 'adamax'} 
+ learning_rate: 0.0001 
+ gradient_threshold: None 
+ alpha: 2.5 
+ beta: 11.2 
+ gamma: 1.5 
+ delta: 2.5 
+ eps: 0.3 
+ content_layers_idx: [20] 
+ style_layers_idx: [2, 7, 14, 20, 25, 28, 32] 
